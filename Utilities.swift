@@ -90,10 +90,20 @@ class UserDefaultsManager: ObservableObject {
 }
 
 // MARK: - User Model for Login
-struct User: Codable, Identifiable {
+struct User: Codable, Identifiable, Hashable {
     let id: Int?
     let name: String
     let email: String?
+    
+    // Implement Hashable manually since id is optional
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(email)
+    }
+    
+    static func == (lhs: User, rhs: User) -> Bool {
+        return lhs.name == rhs.name && lhs.email == rhs.email
+    }
 }
 
 // MARK: - Enhanced API Service
