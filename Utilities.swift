@@ -86,18 +86,33 @@ class UserDefaultsManager: ObservableObject {
     }
 }
 
-class EnhancedAPIService: ObservableObject {
+class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
     @Published var isLoading = false
     private let userDefaultsManager: UserDefaultsManager
-    private let session = URLSession.shared
+    private lazy var session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 60
+        return URLSession(configuration: config, delegate: self, delegateQueue: nil)
+    }()
     
     init(userDefaultsManager: UserDefaultsManager) {
         self.userDefaultsManager = userDefaultsManager
+        super.init()
+    }
+    
+    func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        completionHandler(.useCredential, URLCredential(trust: challenge.protectionSpace.serverTrust!))
     }
     
     private var baseURL: String {
         let ip = userDefaultsManager.baseURL.isEmpty ? "192.168.1.100" : userDefaultsManager.baseURL
-        return ip.hasPrefix("http") ? ip : "http://\(ip)"
+        
+        if ip.hasPrefix("http://") || ip.hasPrefix("https://") {
+            return ip
+        } else {
+            return "https://\(ip)"
+        }
     }
     
     private func createRequest(url: URL, method: String = "GET", body: Data? = nil) -> URLRequest {
@@ -349,7 +364,7 @@ struct SettingsView: View {
                             .font(.headline)
                             .foregroundColor(.primary)
                         
-                        Text("例: 192.168.1.100 または http://192.168.1.100")
+                        Text("例: 192.168.1.100 または https://192.168.1.100")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
