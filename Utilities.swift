@@ -1,7 +1,6 @@
 import SwiftUI
 import Foundation
 
-// MARK: - Network Extensions
 extension URLSession {
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
         return try await withCheckedThrowingContinuation { continuation in
@@ -23,7 +22,6 @@ extension URLSession {
     }
 }
 
-// MARK: - API Error Handling
 enum APIError: LocalizedError {
     case invalidURL
     case noData
@@ -47,7 +45,6 @@ enum APIError: LocalizedError {
     }
 }
 
-// MARK: - User Defaults Manager
 class UserDefaultsManager: ObservableObject {
     private let userDefaults = UserDefaults.standard
     
@@ -89,24 +86,6 @@ class UserDefaultsManager: ObservableObject {
     }
 }
 
-// MARK: - User Model for Login
-struct User: Codable, Identifiable, Hashable {
-    let id: Int?
-    let name: String
-    let email: String?
-    
-    // Implement Hashable manually since id is optional
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(name)
-        hasher.combine(email)
-    }
-    
-    static func == (lhs: User, rhs: User) -> Bool {
-        return lhs.name == rhs.name && lhs.email == rhs.email
-    }
-}
-
-// MARK: - Enhanced API Service
 class EnhancedAPIService: ObservableObject {
     @Published var isLoading = false
     private let userDefaultsManager: UserDefaultsManager
@@ -127,7 +106,6 @@ class EnhancedAPIService: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         
-        // Add CSRF token and session handling for Laravel
         if !userDefaultsManager.authToken.isEmpty {
             request.setValue(userDefaultsManager.authToken, forHTTPHeaderField: "X-CSRF-TOKEN")
         }
@@ -157,7 +135,6 @@ class EnhancedAPIService: ObservableObject {
             throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 0)
         }
         
-        // Parse HTML response to extract users from select options
         if let htmlString = String(data: data, encoding: .utf8) {
             return parseUsersFromHTML(htmlString)
         }
@@ -168,7 +145,6 @@ class EnhancedAPIService: ObservableObject {
     private func parseUsersFromHTML(_ html: String) -> [User] {
         var users: [User] = []
         
-        // Simple regex to extract user names from select options
         let pattern = #"<option value="([^"]+)">([^<]+)</option>"#
         let regex = try! NSRegularExpression(pattern: pattern)
         let range = NSRange(location: 0, length: html.utf16.count)
@@ -344,7 +320,6 @@ class EnhancedAPIService: ObservableObject {
     }
 }
 
-// MARK: - Settings View
 struct SettingsView: View {
     @StateObject private var userDefaultsManager = UserDefaultsManager()
     @State private var serverIP = ""
@@ -430,7 +405,6 @@ struct SettingsView: View {
     private func saveSettings() {
         var cleanIP = serverIP.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        // Remove trailing slash if present
         if cleanIP.hasSuffix("/") {
             cleanIP = String(cleanIP.dropLast())
         }
@@ -441,7 +415,6 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Enhanced Login View
 struct EnhancedLoginView: View {
     @StateObject private var userDefaultsManager = UserDefaultsManager()
     @StateObject private var apiService: EnhancedAPIService
@@ -526,7 +499,6 @@ struct EnhancedLoginView: View {
                                 .padding()
                         }
                         
-                        // Settings button
                         HStack {
                             Spacer()
                             Button("設定") {
@@ -599,7 +571,6 @@ struct EnhancedLoginView: View {
     }
 }
 
-// MARK: - Enhanced Process Selection View
 struct EnhancedProcessSelectionView: View {
     @EnvironmentObject var userDefaultsManager: UserDefaultsManager
     @StateObject private var apiService: EnhancedAPIService
@@ -629,7 +600,6 @@ struct EnhancedProcessSelectionView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 20) {
-                // Header
                 HStack {
                     Text(userDefaultsManager.userName)
                         .font(.title2)
@@ -773,7 +743,6 @@ struct EnhancedProcessSelectionView: View {
     }
 }
 
-// MARK: - Enhanced QR Scanner Container View
 struct EnhancedQRScannerContainerView: View {
     let selectedProcess: ProcessType
     let selectedCompany: Company?
@@ -796,7 +765,6 @@ struct EnhancedQRScannerContainerView: View {
     var body: some View {
         NavigationView {
             VStack {
-                // Header
                 HStack {
                     Text(userName)
                         .font(.title2)
@@ -815,13 +783,11 @@ struct EnhancedQRScannerContainerView: View {
                         .padding()
                 }
                 
-                // QR Scanner
                 QRScannerView(scannedCode: $scannedCode)
                     .frame(height: 300)
                     .cornerRadius(10)
                     .padding(.horizontal)
                 
-                // Process info
                 VStack(alignment: .leading, spacing: 4) {
                     Text("処理: \(selectedProcess.displayName)")
                         .font(.headline)
@@ -845,7 +811,6 @@ struct EnhancedQRScannerContainerView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal)
                 
-                // Scanned Items List
                 if !scannedItems.isEmpty {
                     List(scannedItems.indices, id: \.self) { index in
                         VStack(alignment: .leading, spacing: 4) {
@@ -922,7 +887,6 @@ struct EnhancedQRScannerContainerView: View {
     }
 }
 
-// MARK: - Main App with Enhanced Login
 @main
 struct EnhancedQRScannerApp: App {
     var body: some Scene {
