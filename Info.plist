@@ -57,11 +57,9 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	
-	<!-- ВАЖНО: Разрешение на камеру для QR сканера -->
 	<key>NSCameraUsageDescription</key>
 	<string>このアプリはQRコードをスキャンするためにカメラを使用します。</string>
 	
-	<!-- ВАЖНО: Настройки сети для подключения к Laravel серверу -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
