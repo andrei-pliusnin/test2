@@ -263,43 +263,62 @@ struct ConnectionTestView: View {
         connectionStatus = .connecting
         testResult = ""
         
-        let baseURL = serverIP.hasPrefix("http") ? serverIP : "http://\(serverIP)"
+        var testURLs: [String] = []
+        
+        if serverIP.hasPrefix("http://") || serverIP.hasPrefix("https://") {
+            testURLs = [serverIP]
+        } else {
+            testURLs = ["https://\(serverIP)", "http://\(serverIP)"]
+        }
         
         Task {
-            do {
-                guard let url = URL(string: "\(baseURL)/login") else {
-                    throw URLError(.badURL)
-                }
-                
-                let request = URLRequest(url: url)
-                let (data, response) = try await URLSession.shared.data(for: request)
-                
-                DispatchQueue.main.async {
-                    if let httpResponse = response as? HTTPURLResponse {
-                        self.testResult = """
-                        接続テスト結果:
-                        URL: \(url.absoluteString)
-                        Status Code: \(httpResponse.statusCode)
-                        Response Size: \(data.count) bytes
-                        
-                        Headers:
-                        \(httpResponse.allHeaderFields.map { "\($0.key): \($0.value)" }.joined(separator: "\n"))
-                        """
-                        
-                        if httpResponse.statusCode == 200 {
-                            self.connectionStatus = .success
-                        } else {
-                            self.connectionStatus = .failed
-                        }
+            for baseURL in testURLs {
+                do {
+                    guard let url = URL(string: "\(baseURL)/login") else {
+                        continue
                     }
-                    self.isLoading = false
+                    
+                    var request = URLRequest(url: url)
+                    request.timeoutInterval = 10
+                    
+                    let config = URLSessionConfiguration.default
+                    let session = URLSession(configuration: config)
+                    
+                    let (data, response) = try await session.data(for: request)
+                    
+                    DispatchQueue.main.async {
+                        if let httpResponse = response as? HTTPURLResponse {
+                            self.testResult = """
+                            接続テスト結果:
+                            URL: \(url.absoluteString)
+                            Protocol: \(url.scheme?.uppercased() ?? "UNKNOWN")
+                            Status Code: \(httpResponse.statusCode)
+                            Response Size: \(data.count) bytes
+                            
+                            Headers:
+                            \(httpResponse.allHeaderFields.map { "\($0.key): \($0.value)" }.joined(separator: "\n"))
+                            """
+                            
+                            if httpResponse.statusCode == 200 {
+                                self.connectionStatus = .success
+                            } else {
+                                self.connectionStatus = .failed
+                            }
+                        }
+                        self.isLoading = false
+                    }
+                    return
+                    
+                } catch {
+                    print("Failed to connect to \(baseURL): \(error)")
+                    continue
                 }
-            } catch {
-                DispatchQueue.main.async {
-                    self.testResult = "接続エラー: \(error.localizedDescription)"
-                    self.connectionStatus = .failed
-                    self.isLoading = false
-                }
+            }
+            
+            DispatchQueue.main.async {
+                self.testResult = "すべてのプロトコル（HTTP/HTTPS）で接続に失敗しました\n\n試行したURL:\n" + testURLs.joined(separator: "\n")
+                self.connectionStatus = .failed
+                self.isLoading = false
             }
         }
     }
@@ -327,11 +346,11 @@ struct AdvancedSettingsView: View {
                         Text("サーバーIP設定")
                             .font(.headline)
                         
-                        Text("Laravel サーバーのIPアドレスを入力してください")
+                        Text("Laravel サーバーのIPアドレスを入力してください（HTTPS対応）")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         
-                        TextField("例: 192.168.1.100", text: $serverIP)
+                        TextField("例: 192.168.1.100 または https://192.168.1.100", text: $serverIP)
                             .textFieldStyle(RoundedBorderTextFieldStyle())
                             .autocapitalization(.none)
                             .disableAutocorrection(true)
