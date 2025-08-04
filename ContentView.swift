@@ -538,14 +538,12 @@ struct QRScannerContainerView: View {
     }
 }
 
-// MARK: - Main App
 struct ContentView: View {
     var body: some View {
         EnhancedLoginView()
     }
 }
 
-@main
 struct QRScannerApp: App {
     var body: some Scene {
         WindowGroup {
