@@ -3,17 +3,17 @@ import AVFoundation
 import Combine
 
 // MARK: - Models
-struct Company: Codable, Identifiable {
+struct Company: Codable, Identifiable, Hashable {
     let id: Int
     let name: String
 }
 
-struct Group: Codable, Identifiable {
+struct Group: Codable, Identifiable, Hashable {
     let id: Int
     let name: String
 }
 
-struct Location: Codable, Identifiable {
+struct Location: Codable, Identifiable, Hashable {
     let id: Int
     let name: String
 }
