@@ -1,7 +1,6 @@
 import SwiftUI
 import Foundation
 
-// MARK: - Debug View for Testing API
 struct DebugView: View {
     @StateObject private var userDefaultsManager = UserDefaultsManager()
     @StateObject private var apiService: EnhancedAPIService
@@ -167,7 +166,6 @@ struct DebugView: View {
     }
 }
 
-// MARK: - Connection Test View
 struct ConnectionTestView: View {
     @State private var serverIP = ""
     @State private var testResult = ""
@@ -307,7 +305,6 @@ struct ConnectionTestView: View {
     }
 }
 
-// MARK: - Settings with Advanced Options
 struct AdvancedSettingsView: View {
     @StateObject private var userDefaultsManager = UserDefaultsManager()
     @State private var serverIP = ""
@@ -326,7 +323,6 @@ struct AdvancedSettingsView: View {
                     .padding(.top)
                 
                 VStack(spacing: 16) {
-                    // Server IP Setting
                     VStack(alignment: .leading, spacing: 8) {
                         Text("サーバーIP設定")
                             .font(.headline)
@@ -350,7 +346,6 @@ struct AdvancedSettingsView: View {
                     .background(Color.gray.opacity(0.1))
                     .cornerRadius(8)
                     
-                    // Current Settings
                     if !userDefaultsManager.baseURL.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("現在の設定")
@@ -366,7 +361,6 @@ struct AdvancedSettingsView: View {
                         .cornerRadius(8)
                     }
                     
-                    // Testing Tools
                     VStack(spacing: 12) {
                         Text("テストツール")
                             .font(.headline)
@@ -439,24 +433,5 @@ struct AdvancedSettingsView: View {
         serverIP = ""
         alertMessage = "すべての設定がリセットされました"
         showingAlert = true
-    }
-}
-
-// MARK: - Preview for Testing
-struct DebugView_Previews: PreviewProvider {
-    static var previews: some View {
-        DebugView()
-    }
-}
-
-struct ConnectionTestView_Previews: PreviewProvider {
-    static var previews: some View {
-        ConnectionTestView()
-    }
-}
-
-struct AdvancedSettingsView_Previews: PreviewProvider {
-    static var previews: some View {
-        AdvancedSettingsView()
     }
 }
