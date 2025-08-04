@@ -2,7 +2,6 @@ import SwiftUI
 import AVFoundation
 import Combine
 
-// MARK: - Models
 struct Company: Codable, Identifiable, Hashable {
     let id: Int
     let name: String
@@ -18,7 +17,22 @@ struct Location: Codable, Identifiable, Hashable {
     let name: String
 }
 
-enum ProcessType: String, CaseIterable {
+struct User: Codable, Identifiable, Hashable {
+    let id: Int?
+    let name: String
+    let email: String?
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+        hasher.combine(email)
+    }
+    
+    static func == (lhs: User, rhs: User) -> Bool {
+        return lhs.name == rhs.name && lhs.email == rhs.email
+    }
+}
+
+enum ProcessType: String, CaseIterable, Hashable {
     case shipping = "出荷"
     case return_ = "返却"
     case disposal = "廃棄"
@@ -47,14 +61,11 @@ struct ScannedItem: Codable {
     }
 }
 
-// MARK: - API Service
 class APIService: ObservableObject {
-    private let baseURL = "YOUR_BASE_URL_HERE" // Замените на ваш URL
+    private let baseURL = "YOUR_BASE_URL_HERE"
     private let session = URLSession.shared
     
     func fetchCompanies() async throws -> [Company] {
-        // Implement API call to get companies
-        // Пока возвращаем mock данные
         return [
             Company(id: 1, name: "Company A"),
             Company(id: 2, name: "Company B")
@@ -87,7 +98,6 @@ class APIService: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        // Add CSRF token if needed
         
         let body = [
             "qr_code": qrCode,
@@ -106,7 +116,6 @@ class APIService: ObservableObject {
     }
 }
 
-// MARK: - QR Scanner View
 struct QRScannerView: UIViewControllerRepresentable {
     @Binding var scannedCode: String?
     @Environment(\.presentationMode) var presentationMode
@@ -196,7 +205,6 @@ class QRScannerViewController: UIViewController {
         previewLayer.videoGravity = .resizeAspectFill
         view.layer.addSublayer(previewLayer)
         
-        // Add scanning overlay
         let overlayView = createScanningOverlay()
         view.addSubview(overlayView)
     }
@@ -220,7 +228,6 @@ class QRScannerViewController: UIViewController {
             scanArea.heightAnchor.constraint(equalToConstant: 250)
         ])
         
-        // Create hole in overlay
         let path = UIBezierPath(rect: overlayView.bounds)
         let scanAreaPath = UIBezierPath(roundedRect: CGRect(x: (view.bounds.width - 250) / 2, y: (view.bounds.height - 250) / 2, width: 250, height: 250), cornerRadius: 10)
         path.append(scanAreaPath.reversing())
@@ -253,7 +260,6 @@ extension QRScannerViewController: AVCaptureMetadataOutputObjectsDelegate {
               let readableObject = metadataObject as? AVMetadataMachineReadableCodeObject,
               let stringValue = readableObject.stringValue else { return }
         
-        // Prevent duplicate scans
         let currentTime = Date()
         if stringValue == lastScannedCode && currentTime.timeIntervalSince(lastScanTime) < 2.0 {
             return
@@ -267,7 +273,6 @@ extension QRScannerViewController: AVCaptureMetadataOutputObjectsDelegate {
     }
 }
 
-// MARK: - Process Selection View
 struct ProcessSelectionView: View {
     @StateObject private var apiService = APIService()
     @State private var selectedProcess: ProcessType = .shipping
@@ -275,7 +280,7 @@ struct ProcessSelectionView: View {
     @State private var selectedGroup: Group?
     @State private var selectedLocation: Location?
     @State private var note: String = ""
-    @State private var userName: String = "User" // Get from authentication
+    @State private var userName: String = "User"
     
     @State private var companies: [Company] = []
     @State private var groups: [Group] = []
@@ -291,14 +296,12 @@ struct ProcessSelectionView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 20) {
-                // Header
                 HStack {
                     Text(userName)
                         .font(.title2)
                         .fontWeight(.semibold)
                     Spacer()
                     Button("ログアウト") {
-                        // Implement logout
                     }
                     .buttonStyle(.borderedProminent)
                 }
@@ -419,7 +422,6 @@ struct ProcessSelectionView: View {
     }
 }
 
-// MARK: - QR Scanner Container View
 struct QRScannerContainerView: View {
     let selectedProcess: ProcessType
     let selectedCompany: Company?
@@ -442,7 +444,6 @@ struct QRScannerContainerView: View {
     var body: some View {
         NavigationView {
             VStack {
-                // Header
                 HStack {
                     Text(userName)
                         .font(.title2)
@@ -455,13 +456,11 @@ struct QRScannerContainerView: View {
                 }
                 .padding(.horizontal)
                 
-                // QR Scanner
                 QRScannerView(scannedCode: $scannedCode)
                     .frame(height: 300)
                     .cornerRadius(10)
                     .padding(.horizontal)
                 
-                // Scanned Items List
                 if !scannedItems.isEmpty {
                     List(scannedItems.indices, id: \.self) { index in
                         VStack(alignment: .leading, spacing: 4) {
