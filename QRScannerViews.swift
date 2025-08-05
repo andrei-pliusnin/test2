@@ -27,7 +27,7 @@ class QRScannerViewController: UIViewController {
         if captureSession != nil {
             startScanning()
         }
-        // If capture session is not initialized, startScanning will be called 
+        // If capture session is not initialized, startScanning will be called
         // from initializeCaptureSession after setup is complete
     }
     
@@ -335,7 +335,7 @@ struct SettingsView: View {
                 serverIP = userDefaultsManager.baseURL
             }
             .alert("設定", isPresented: $showingAlert) {
-                Button("OK") { 
+                Button("OK") {
                     presentationMode.wrappedValue.dismiss()
                 }
             } message: {
