@@ -16,7 +16,9 @@ class QRScannerViewController: UIViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
-        setupCamera()
+        Task {
+            await setupCamera()
+        }
     }
     
     override func viewWillAppear(_ animated: Bool) {
@@ -29,21 +31,43 @@ class QRScannerViewController: UIViewController {
         stopScanning()
     }
     
-    private func setupCamera() {
+    private func setupCamera() async {
+        // Check camera permission first
+        let cameraPermission = await CameraPermissionHandler.checkCameraPermission()
+        
+        guard cameraPermission else {
+            DispatchQueue.main.async {
+                self.showCameraPermissionAlert()
+            }
+            return
+        }
+        
+        DispatchQueue.main.async {
+            self.initializeCaptureSession()
+        }
+    }
+    
+    private func initializeCaptureSession() {
         captureSession = AVCaptureSession()
         
-        guard let videoCaptureDevice = AVCaptureDevice.default(for: .video) else { return }
+        guard let videoCaptureDevice = AVCaptureDevice.default(for: .video) else {
+            showErrorAlert("カメラが利用できません")
+            return
+        }
+        
         let videoInput: AVCaptureDeviceInput
         
         do {
             videoInput = try AVCaptureDeviceInput(device: videoCaptureDevice)
         } catch {
+            showErrorAlert("カメラの初期化に失敗しました: \(error.localizedDescription)")
             return
         }
         
         if captureSession.canAddInput(videoInput) {
             captureSession.addInput(videoInput)
         } else {
+            showErrorAlert("カメラ入力の追加に失敗しました")
             return
         }
         
@@ -55,6 +79,7 @@ class QRScannerViewController: UIViewController {
             metadataOutput.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
             metadataOutput.metadataObjectTypes = [.qr]
         } else {
+            showErrorAlert("メタデータ出力の追加に失敗しました")
             return
         }
         
@@ -65,6 +90,35 @@ class QRScannerViewController: UIViewController {
         
         let overlayView = createScanningOverlay()
         view.addSubview(overlayView)
+    }
+    
+    private func showCameraPermissionAlert() {
+        let alert = UIAlertController(
+            title: "カメラアクセス許可が必要です",
+            message: "QRコードをスキャンするにはカメラへのアクセスを許可してください。設定からカメラアクセスを有効にしてください。",
+            preferredStyle: .alert
+        )
+        
+        alert.addAction(UIAlertAction(title: "設定を開く", style: .default) { _ in
+            if let settingsUrl = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(settingsUrl)
+            }
+        })
+        
+        alert.addAction(UIAlertAction(title: "キャンセル", style: .cancel))
+        
+        present(alert, animated: true)
+    }
+    
+    private func showErrorAlert(_ message: String) {
+        let alert = UIAlertController(
+            title: "エラー",
+            message: message,
+            preferredStyle: .alert
+        )
+        
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
     
     private func createScanningOverlay() -> UIView {
@@ -569,7 +623,15 @@ struct ProcessSelectionView: View {
             companies = try await apiService.fetchCompanies()
         } catch {
             DispatchQueue.main.async {
-                self.alertMessage = error.localizedDescription
+                // Check if it's an unauthorized error
+                if let apiError = error as? APIError,
+                   case .serverError(let code) = apiError,
+                   code == 401 {
+                    // User was logged out due to unauthorized access
+                    self.alertMessage = "セッションが期限切れです。再度ログインしてください。"
+                } else {
+                    self.alertMessage = "会社リストの読み込みエラー: \(error.localizedDescription)"
+                }
                 self.showingAlert = true
             }
         }
@@ -584,7 +646,13 @@ struct ProcessSelectionView: View {
                 groups = try await apiService.fetchGroups(for: companyId)
             } catch {
                 DispatchQueue.main.async {
-                    self.alertMessage = error.localizedDescription
+                    if let apiError = error as? APIError,
+                       case .serverError(let code) = apiError,
+                       code == 401 {
+                        self.alertMessage = "セッションが期限切れです。再度ログインしてください。"
+                    } else {
+                        self.alertMessage = "グループリストの読み込みエラー: \(error.localizedDescription)"
+                    }
                     self.showingAlert = true
                 }
             }
@@ -600,7 +668,13 @@ struct ProcessSelectionView: View {
                 locations = try await apiService.fetchLocations(for: groupId)
             } catch {
                 DispatchQueue.main.async {
-                    self.alertMessage = error.localizedDescription
+                    if let apiError = error as? APIError,
+                       case .serverError(let code) = apiError,
+                       code == 401 {
+                        self.alertMessage = "セッションが期限切れです。再度ログインしてください。"
+                    } else {
+                        self.alertMessage = "ロケーションリストの読み込みエラー: \(error.localizedDescription)"
+                    }
                     self.showingAlert = true
                 }
             }
@@ -733,14 +807,32 @@ struct QRScannerContainerView: View {
                             self.scannedItems.append(item)
                             self.scanCount += 1
                         }
+                        VibrationHelper.success()
                         self.showAlert(title: "成功", message: "QRコードの読み取りに成功しました")
                     } else {
+                        VibrationHelper.error()
                         self.showAlert(title: "失敗", message: result.message ?? "不明なエラー")
                     }
                 }
             } catch {
                 DispatchQueue.main.async {
-                    self.showAlert(title: "失敗", message: error.localizedDescription)
+                    VibrationHelper.error()
+                    
+                    var errorMessage = error.localizedDescription
+                    
+                    // Check for specific error types
+                    if let apiError = error as? APIError {
+                        switch apiError {
+                        case .unauthorized:
+                            errorMessage = "セッションが期限切れです。アプリを再起動してログインし直してください。"
+                        case .serverError(419):
+                            errorMessage = "CSRFトークンエラー。アプリを再起動してください。"
+                        default:
+                            errorMessage = apiError.localizedDescription
+                        }
+                    }
+                    
+                    self.showAlert(title: "エラー", message: errorMessage)
                 }
             }
         }
