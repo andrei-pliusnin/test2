@@ -13,6 +13,9 @@ class ImprovedQRScannerViewController: UIViewController {
     private var lastScanTime: Date = Date()
     private var isSetupComplete = false
     private var torchButton: UIButton?
+    private var scanningLineView: UIView?
+    private var scanningAnimation: CABasicAnimation?
+    private var overlayView: UIView?
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -123,8 +126,8 @@ class ImprovedQRScannerViewController: UIViewController {
                 view.layer.addSublayer(previewLayer)
             }
             
-            let overlayView = createImprovedScanningOverlay()
-            view.addSubview(overlayView)
+            overlayView = createImprovedScanningOverlay()
+            view.addSubview(overlayView!)
             
             setupTorchButton()
             
@@ -270,6 +273,18 @@ class ImprovedQRScannerViewController: UIViewController {
             }
         }
         
+        scanningLineView = UIView()
+        scanningLineView?.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.8)
+        scanningLineView?.translatesAutoresizingMaskIntoConstraints = false
+        scanArea.addSubview(scanningLineView!)
+        
+        NSLayoutConstraint.activate([
+            scanningLineView!.leadingAnchor.constraint(equalTo: scanArea.leadingAnchor, constant: 10),
+            scanningLineView!.trailingAnchor.constraint(equalTo: scanArea.trailingAnchor, constant: -10),
+            scanningLineView!.heightAnchor.constraint(equalToConstant: 2),
+            scanningLineView!.topAnchor.constraint(equalTo: scanArea.topAnchor, constant: 20)
+        ])
+        
         overlayView.addSubview(scanArea)
         scanArea.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -312,6 +327,52 @@ class ImprovedQRScannerViewController: UIViewController {
         return overlayView
     }
     
+    private func startScanningAnimation() {
+        guard let scanningLineView = scanningLineView else { return }
+        
+        scanningAnimation = CABasicAnimation(keyPath: "transform.translation.y")
+        scanningAnimation?.fromValue = 0
+        scanningAnimation?.toValue = (min(view.bounds.width, view.bounds.height) * 0.7) - 40
+        scanningAnimation?.duration = 2.0
+        scanningAnimation?.repeatCount = .infinity
+        scanningAnimation?.autoreverses = true
+        scanningAnimation?.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        
+        scanningLineView.layer.add(scanningAnimation!, forKey: "scanningAnimation")
+    }
+    
+    private func stopScanningAnimation() {
+        scanningLineView?.layer.removeAnimation(forKey: "scanningAnimation")
+    }
+    
+    private func animateSuccessfulScan() {
+        guard let overlayView = overlayView else { return }
+        
+        let flashView = UIView(frame: overlayView.bounds)
+        flashView.backgroundColor = UIColor.systemGreen.withAlphaComponent(0.3)
+        flashView.alpha = 0
+        overlayView.addSubview(flashView)
+        
+        UIView.animate(withDuration: 0.3, animations: {
+            flashView.alpha = 1
+        }) { _ in
+            UIView.animate(withDuration: 0.3, animations: {
+                flashView.alpha = 0
+            }) { _ in
+                flashView.removeFromSuperview()
+            }
+        }
+        
+        if let scanningLineView = scanningLineView {
+            let scaleAnimation = CABasicAnimation(keyPath: "transform.scale")
+            scaleAnimation.fromValue = 1.0
+            scaleAnimation.toValue = 1.5
+            scaleAnimation.duration = 0.2
+            scaleAnimation.autoreverses = true
+            scanningLineView.layer.add(scaleAnimation, forKey: "scaleAnimation")
+        }
+    }
+    
     private func showCameraPermissionAlert() {
         let alert = UIAlertController(
             title: "カメラアクセス許可が必要です",
@@ -349,12 +410,17 @@ class ImprovedQRScannerViewController: UIViewController {
         if !captureSession.isRunning {
             DispatchQueue.global(qos: .userInitiated).async {
                 captureSession.startRunning()
+                DispatchQueue.main.async {
+                    self.startScanningAnimation()
+                }
             }
         }
     }
     
     private func stopScanning() {
         guard let captureSession = captureSession else { return }
+        
+        stopScanningAnimation()
         
         if captureSession.isRunning {
             DispatchQueue.global(qos: .userInitiated).async {
@@ -388,7 +454,7 @@ extension ImprovedQRScannerViewController: AVCaptureMetadataOutputObjectsDelegat
         lastScannedCode = stringValue
         lastScanTime = currentTime
         
-        AudioServicesPlaySystemSound(1108)
+        animateSuccessfulScan()
         
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
@@ -423,6 +489,386 @@ struct ImprovedQRScannerView: UIViewControllerRepresentable {
         func didScanQRCode(_ code: String) {
             parent.scannedCode = code
         }
+    }
+}
+
+class CameraPermissionHandler {
+    static func checkCameraPermission() async -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            return true
+        case .notDetermined:
+            return await AVCaptureDevice.requestAccess(for: .video)
+        case .denied, .restricted:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+}
+
+class UserDefaultsManager: ObservableObject {
+    @Published var isLoggedIn: Bool = false
+    @Published var userName: String = ""
+    @Published var baseURL: String = ""
+    @Published var csrfToken: String = ""
+    
+    init() {
+        isLoggedIn = UserDefaults.standard.bool(forKey: "isLoggedIn")
+        userName = UserDefaults.standard.string(forKey: "userName") ?? ""
+        baseURL = UserDefaults.standard.string(forKey: "baseURL") ?? ""
+        csrfToken = UserDefaults.standard.string(forKey: "csrfToken") ?? ""
+    }
+    
+    func login(userName: String, token: String) {
+        self.userName = userName
+        self.csrfToken = token
+        self.isLoggedIn = true
+        
+        UserDefaults.standard.set(true, forKey: "isLoggedIn")
+        UserDefaults.standard.set(userName, forKey: "userName")
+        UserDefaults.standard.set(token, forKey: "csrfToken")
+    }
+    
+    func logout() {
+        isLoggedIn = false
+        userName = ""
+        csrfToken = ""
+        
+        UserDefaults.standard.set(false, forKey: "isLoggedIn")
+        UserDefaults.standard.removeObject(forKey: "userName")
+        UserDefaults.standard.removeObject(forKey: "csrfToken")
+    }
+}
+
+struct User: Identifiable, Codable {
+    let id: Int
+    let name: String
+}
+
+struct Company: Identifiable, Codable {
+    let id: Int
+    let name: String
+}
+
+struct Group: Identifiable, Codable {
+    let id: Int
+    let name: String
+}
+
+struct Location: Identifiable, Codable {
+    let id: Int
+    let name: String
+}
+
+enum ProcessType: String, CaseIterable, Codable {
+    case shipping = "shipping"
+    case return_ = "return"
+    case disposal = "disposal"
+    
+    var displayName: String {
+        switch self {
+        case .shipping: return "出荷"
+        case .return_: return "返却"
+        case .disposal: return "廃棄"
+        }
+    }
+}
+
+struct ScannedItem: Identifiable {
+    let id = UUID()
+    let managementNumber: String
+    let company: String?
+    let group: String?
+    let location: String?
+    let status: String
+}
+
+struct ScanResult {
+    let success: Bool
+    let message: String?
+    let item: ScannedItem?
+}
+
+enum APIError: Error, LocalizedError {
+    case networkError(String)
+    case serverError(Int)
+    case decodingError
+    case invalidURL
+    case invalidResponse
+    
+    var errorDescription: String? {
+        switch self {
+        case .networkError(let message):
+            return "ネットワークエラー: \(message)"
+        case .serverError(let code):
+            return "サーバーエラー (コード: \(code))"
+        case .decodingError:
+            return "データ解析エラー"
+        case .invalidURL:
+            return "無効なURL"
+        case .invalidResponse:
+            return "無効なレスポンス"
+        }
+    }
+}
+
+class EnhancedAPIService: ObservableObject {
+    let userDefaultsManager: UserDefaultsManager
+    @Published var isLoading = false
+    
+    init(userDefaultsManager: UserDefaultsManager) {
+        self.userDefaultsManager = userDefaultsManager
+    }
+    
+    func fetchUsers() async throws -> [User] {
+        guard !userDefaultsManager.baseURL.isEmpty else {
+            throw APIError.invalidURL
+        }
+        
+        let url = URL(string: "\(userDefaultsManager.baseURL)/users")!
+        
+        DispatchQueue.main.async {
+            self.isLoading = true
+        }
+        
+        defer {
+            DispatchQueue.main.async {
+                self.isLoading = false
+            }
+        }
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw APIError.invalidResponse
+            }
+            
+            guard httpResponse.statusCode == 200 else {
+                throw APIError.serverError(httpResponse.statusCode)
+            }
+            
+            return try JSONDecoder().decode([User].self, from: data)
+        } catch {
+            if error is APIError {
+                throw error
+            } else {
+                throw APIError.networkError(error.localizedDescription)
+            }
+        }
+    }
+    
+    func login(username: String) async throws -> Bool {
+        guard !userDefaultsManager.baseURL.isEmpty else {
+            throw APIError.invalidURL
+        }
+        
+        let url = URL(string: "\(userDefaultsManager.baseURL)/login")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let loginData = ["username": username]
+        request.httpBody = try JSONSerialization.data(withJSONObject: loginData)
+        
+        DispatchQueue.main.async {
+            self.isLoading = true
+        }
+        
+        defer {
+            DispatchQueue.main.async {
+                self.isLoading = false
+            }
+        }
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw APIError.invalidResponse
+            }
+            
+            guard httpResponse.statusCode == 200 else {
+                throw APIError.serverError(httpResponse.statusCode)
+            }
+            
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let token = json["csrf_token"] as? String {
+                DispatchQueue.main.async {
+                    self.userDefaultsManager.login(userName: username, token: token)
+                }
+                return true
+            }
+            
+            return false
+        } catch {
+            if error is APIError {
+                throw error
+            } else {
+                throw APIError.networkError(error.localizedDescription)
+            }
+        }
+    }
+    
+    func fetchCompanies() async throws -> [Company] {
+        return try await fetchData(endpoint: "/companies", type: [Company].self)
+    }
+    
+    func fetchGroups(for companyId: Int) async throws -> [Group] {
+        return try await fetchData(endpoint: "/companies/\(companyId)/groups", type: [Group].self)
+    }
+    
+    func fetchLocations(for groupId: Int) async throws -> [Location] {
+        return try await fetchData(endpoint: "/groups/\(groupId)/locations", type: [Location].self)
+    }
+    
+    private func fetchData<T: Decodable>(endpoint: String, type: T.Type) async throws -> T {
+        guard !userDefaultsManager.baseURL.isEmpty else {
+            throw APIError.invalidURL
+        }
+        
+        let url = URL(string: "\(userDefaultsManager.baseURL)\(endpoint)")!
+        var request = URLRequest(url: url)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if !userDefaultsManager.csrfToken.isEmpty {
+            request.setValue(userDefaultsManager.csrfToken, forHTTPHeaderField: "X-CSRF-Token")
+        }
+        
+        DispatchQueue.main.async {
+            self.isLoading = true
+        }
+        
+        defer {
+            DispatchQueue.main.async {
+                self.isLoading = false
+            }
+        }
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw APIError.invalidResponse
+            }
+            
+            guard httpResponse.statusCode == 200 else {
+                throw APIError.serverError(httpResponse.statusCode)
+            }
+            
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            if error is APIError {
+                throw error
+            } else if error is DecodingError {
+                throw APIError.decodingError
+            } else {
+                throw APIError.networkError(error.localizedDescription)
+            }
+        }
+    }
+    
+    func updateStatusWithDiagnostics(
+        qrCode: String,
+        process: ProcessType,
+        company: Int?,
+        group: Int?,
+        location: Int?,
+        userName: String,
+        note: String
+    ) async throws -> ScanResult {
+        guard !userDefaultsManager.baseURL.isEmpty else {
+            throw APIError.invalidURL
+        }
+        
+        let url = URL(string: "\(userDefaultsManager.baseURL)/update-status")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        if !userDefaultsManager.csrfToken.isEmpty {
+            request.setValue(userDefaultsManager.csrfToken, forHTTPHeaderField: "X-CSRF-Token")
+        }
+        
+        var requestData: [String: Any] = [
+            "qr_code": qrCode,
+            "process": process.rawValue,
+            "user_name": userName,
+            "note": note
+        ]
+        
+        if let company = company {
+            requestData["company_id"] = company
+        }
+        if let group = group {
+            requestData["group_id"] = group
+        }
+        if let location = location {
+            requestData["location_id"] = location
+        }
+        
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestData)
+        
+        DispatchQueue.main.async {
+            self.isLoading = true
+        }
+        
+        defer {
+            DispatchQueue.main.async {
+                self.isLoading = false
+            }
+        }
+        
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw APIError.invalidResponse
+            }
+            
+            if httpResponse.statusCode == 200 {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    let success = json["success"] as? Bool ?? false
+                    let message = json["message"] as? String
+                    
+                    var item: ScannedItem?
+                    if success, let itemData = json["item"] as? [String: Any] {
+                        item = ScannedItem(
+                            managementNumber: itemData["management_number"] as? String ?? qrCode,
+                            company: itemData["company"] as? String,
+                            group: itemData["group"] as? String,
+                            location: itemData["location"] as? String,
+                            status: itemData["status"] as? String ?? process.displayName
+                        )
+                    }
+                    
+                    return ScanResult(success: success, message: message, item: item)
+                }
+            } else {
+                throw APIError.serverError(httpResponse.statusCode)
+            }
+            
+            return ScanResult(success: false, message: "不明なエラー", item: nil)
+        } catch {
+            if error is APIError {
+                throw error
+            } else {
+                throw APIError.networkError(error.localizedDescription)
+            }
+        }
+    }
+}
+
+class VibrationHelper {
+    static func success() {
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
+    }
+    
+    static func error() {
+        let notificationFeedback = UINotificationFeedbackGenerator()
+        notificationFeedback.notificationOccurred(.error)
     }
 }
 
@@ -518,6 +964,34 @@ struct SettingsView: View {
         userDefaultsManager.baseURL = cleanIP
         alertMessage = "設定が保存されました"
         showingAlert = true
+    }
+}
+
+struct AdvancedSettingsView: View {
+    @Environment(\.presentationMode) var presentationMode
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                Text("高度な設定")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+                
+                Spacer()
+                
+                Text("現在、高度な設定項目はありません")
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Button("戻る") {
+                    presentationMode.wrappedValue.dismiss()
+                }
+                .buttonStyle(.bordered)
+            }
+            .padding()
+            .navigationBarHidden(true)
+        }
     }
 }
 
