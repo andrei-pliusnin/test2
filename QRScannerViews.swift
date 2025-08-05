@@ -892,12 +892,3 @@ struct QRScannerContainerView: View {
         showingAlert = true
     }
 }
-
-@main
-struct QRScannerApp: App {
-    var body: some Scene {
-        WindowGroup {
-            EnhancedLoginView()
-        }
-    }
-}
