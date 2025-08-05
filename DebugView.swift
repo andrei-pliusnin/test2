@@ -18,20 +18,17 @@ struct DebugView: View {
         testResults += "URL: \(userDefaultsManager.baseURL)/login\n"
         testResults += "CSRF Token: \(userDefaultsManager.csrfToken.isEmpty ? "❌ Missing" : "✅ \(userDefaultsManager.csrfToken.prefix(20))...")\n"
         
-        // Check if we have CSRF token first
         if userDefaultsManager.csrfToken.isEmpty {
             testResults += "⚠️ No CSRF token found. Fetching users first to get token...\n"
             
             Task {
                 do {
-                    // First fetch users to get CSRF token
                     let users = try await apiService.fetchUsers()
                     
                     DispatchQueue.main.async {
                         self.testResults += "✅ Fetched \(users.count) users and CSRF token\n"
                         self.testResults += "CSRF Token: \(self.userDefaultsManager.csrfToken.isEmpty ? "❌ Still Missing" : "✅ \(self.userDefaultsManager.csrfToken.prefix(20))...")\n"
                         
-                        // Now try login with first user
                         if let firstUser = users.first {
                             self.testResults += "Testing login with user: \(firstUser.name)\n"
                             
@@ -62,7 +59,6 @@ struct DebugView: View {
                 }
             }
         } else {
-            // We have CSRF token, proceed with login test
             Task {
                 do {
                     let users = try await apiService.fetchUsers()
