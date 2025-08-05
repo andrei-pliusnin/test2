@@ -24,18 +24,6 @@
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<true/>
-		<key>UISceneConfigurations</key>
-		<dict>
-			<key>UIWindowSceneSessionRoleApplication</key>
-			<array>
-				<dict>
-					<key>UISceneConfigurationName</key>
-					<string>Default Configuration</string>
-					<key>UISceneDelegateClassName</key>
-					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
-				</dict>
-			</array>
-		</dict>
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
@@ -57,21 +45,31 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	
+	<!-- Camera permission for QR code scanning -->
 	<key>NSCameraUsageDescription</key>
 	<string>このアプリはQRコードをスキャンするためにカメラを使用します。</string>
 	
+	<!-- Network security settings - allow local network connections for development -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-		<key>NSAllowsArbitraryLoadsInWebContent</key>
-		<true/>
+		<!-- Allow local networking for development -->
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
-		<key>NSExceptionAllowsInsecureHTTPLoads</key>
+		<!-- For development only - remove in production -->
+		<key>NSAllowsArbitraryLoads</key>
 		<true/>
-		<key>NSExceptionMinimumTLSVersion</key>
-		<string>TLSv1.0</string>
+		<!-- Exception domains for specific servers if needed -->
+		<key>NSExceptionDomains</key>
+		<dict>
+			<!-- Add your server domain here for production -->
+			<key>your-server-domain.com</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSExceptionMinimumTLSVersion</key>
+				<string>TLSv1.2</string>
+			</dict>
+		</dict>
 	</dict>
 </dict>
 </plist>
