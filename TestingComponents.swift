@@ -10,6 +10,8 @@ struct DebugView: View {
     init() {
         let userDefaults = UserDefaultsManager()
         _apiService = StateObject(wrappedValue: EnhancedAPIService(userDefaultsManager: userDefaults))
+    }
+    
     private func testLogin() {
         isLoading = true
         testResults += "\n=== Testing Login ===\n"
