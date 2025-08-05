@@ -2,7 +2,8 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        EnhancedLoginView()
+        Text("QR Scanner App")
+            .font(.title)
     }
 }
 
