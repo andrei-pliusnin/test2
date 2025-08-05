@@ -277,6 +277,35 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
         return users
     }
     
+    private func extractCSRFToken(from html: String) -> String? {
+        let patterns = [
+            #"<meta name="csrf-token" content="([^"]+)""#,
+            #"<input[^>]*name="_token"[^>]*value="([^"]+)""#,
+            #"_token['"]\s*:\s*['"]([^'"]+)['"]"#,
+            #"csrf_token['"]\s*:\s*['"]([^'"]+)['"]"#,
+            #"<input[^>]*type="hidden"[^>]*name="_token"[^>]*value="([^"]+)""#
+        ]
+        
+        for pattern in patterns {
+            do {
+                let regex = try NSRegularExpression(pattern: pattern, options: .caseInsensitive)
+                let range = NSRange(location: 0, length: html.utf16.count)
+                
+                if let match = regex.firstMatch(in: html, range: range),
+                   let tokenRange = Range(match.range(at: 1), in: html) {
+                    let token = String(html[tokenRange])
+                    if !token.isEmpty && token.count > 10 { // Basic validation
+                        return token
+                    }
+                }
+            } catch {
+                continue
+            }
+        }
+        
+        return nil
+    }
+    
     func login(username: String) async throws -> Bool {
         guard let url = URL(string: "\(baseURL)/login") else {
             throw APIError.invalidURL
