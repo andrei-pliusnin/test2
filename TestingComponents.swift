@@ -10,6 +10,36 @@ struct DebugView: View {
     init() {
         let userDefaults = UserDefaultsManager()
         _apiService = StateObject(wrappedValue: EnhancedAPIService(userDefaultsManager: userDefaults))
+    private func testLogin() {
+        isLoading = true
+        testResults += "\n=== Testing Login ===\n"
+        testResults += "URL: \(userDefaultsManager.baseURL)/login\n"
+        testResults += "CSRF Token: \(userDefaultsManager.csrfToken.isEmpty ? "❌ Missing" : "✅ \(userDefaultsManager.csrfToken.prefix(10))...")\n"
+        
+        Task {
+            do {
+                let users = try await apiService.fetchUsers()
+                if let firstUser = users.first {
+                    testResults += "Testing login with user: \(firstUser.name)\n"
+                    
+                    let success = try await apiService.login(username: firstUser.name)
+                    DispatchQueue.main.async {
+                        self.testResults += success ? "✅ Login successful!\n" : "❌ Login failed\n"
+                        self.isLoading = false
+                    }
+                } else {
+                    DispatchQueue.main.async {
+                        self.testResults += "❌ No users found to test login\n"
+                        self.isLoading = false
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.testResults += "❌ Login Error: \(error.localizedDescription)\n"
+                    self.isLoading = false
+                }
+            }
+        }
     }
     
     var body: some View {
@@ -26,6 +56,7 @@ struct DebugView: View {
                         Text("Server IP: \(userDefaultsManager.baseURL)")
                         Text("User: \(userDefaultsManager.userName)")
                         Text("Logged in: \(userDefaultsManager.isLoggedIn ? "Yes" : "No")")
+                        Text("CSRF Token: \(userDefaultsManager.csrfToken.isEmpty ? "❌ Missing" : "✅ Available")")
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
@@ -35,6 +66,11 @@ struct DebugView: View {
                     VStack(spacing: 12) {
                         Button("Test Users API") {
                             testUsersAPI()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        
+                        Button("Test Login") {
+                            testLogin()
                         }
                         .buttonStyle(.borderedProminent)
                         
@@ -93,9 +129,10 @@ struct DebugView: View {
                 let users = try await apiService.fetchUsers()
                 DispatchQueue.main.async {
                     self.testResults += "✅ Success! Found \(users.count) users:\n"
-                    for user in users {
-                        self.testResults += "- \(user.name)\n"
+                    for (index, user) in users.enumerated() {
+                        self.testResults += "- [\(index)] \(user.name)\n"
                     }
+                    self.testResults += "CSRF Token: \(self.userDefaultsManager.csrfToken.isEmpty ? "❌ Missing" : "✅ Found")\n"
                     self.isLoading = false
                 }
             } catch {
@@ -449,6 +486,7 @@ struct AdvancedSettingsView: View {
         userDefaultsManager.userName = ""
         userDefaultsManager.isLoggedIn = false
         userDefaultsManager.authToken = ""
+        userDefaultsManager.csrfToken = ""
         serverIP = ""
         alertMessage = "すべての設定がリセットされました"
         showingAlert = true
