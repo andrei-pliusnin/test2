@@ -1,0 +1,151 @@
+== DATE:
+
+    Tuesday, August 5, 2025 at 14:06:02 Japan Standard Time
+    
+    2025-08-05T05:06:02Z
+
+
+
+== PREVIEW UPDATE ERROR:
+
+    SchemeBuildError: Failed to build the scheme “QrSystem”
+    
+    Multiple commands produce '/Users/okip/Library/Developer/Xcode/DerivedData/QrSystem-fjnxifvgnrxfjpdhvmqpkdblvrgo/Build/Products/Debug-iphonesimulator/QrSystem.app/Info.plist'
+    
+    Prepare build:
+    error: Multiple commands produce '/Users/okip/Library/Developer/Xcode/DerivedData/QrSystem-fjnxifvgnrxfjpdhvmqpkdblvrgo/Build/Products/Debug-iphonesimulator/QrSystem.app/Info.plist'
+        note: Target 'QrSystem' (project 'QrSystem') has copy command from '/Users/okip/Desktop/QrSystem/QrSystem/Info.plist' to '/Users/okip/Library/Developer/Xcode/DerivedData/QrSystem-fjnxifvgnrxfjpdhvmqpkdblvrgo/Build/Products/Debug-iphonesimulator/QrSystem.app/Info.plist'
+        note: Target 'QrSystem' (project 'QrSystem') has process command with output '/Users/okip/Library/Developer/Xcode/DerivedData/QrSystem-fjnxifvgnrxfjpdhvmqpkdblvrgo/Build/Products/Debug-iphonesimulator/QrSystem.app/Info.plist'
+    
+
+
+
+== VERSION INFO:
+
+    Tools: 16C5032a
+    OS:    24D70
+    PID:   1108
+    Model: Mac mini
+    Arch:  arm64e
+
+
+
+== ENVIRONMENT:
+
+    openFiles = [
+        /Users/okip/Desktop/QrSystem/QrSystem/ContentView.swift
+    ]
+    wantsNewBuildSystem = true
+    newBuildSystemAvailable = true
+    activeScheme = QrSystem
+    activeRunDestination = netのiPhone variant iphoneos arm64
+    workspaceArena = [x]
+    buildArena = [x]
+    buildableEntries = [
+        QrSystem.app
+    ]
+    runMode = JIT Executor
+
+
+
+== SELECTED RUN DESTINATION:
+
+    iOS 18.2 | iphoneos | arm64 | iPhone SE | no proxy
+
+
+
+== EXECUTION MODE OVERRIDES:
+
+    Workspace JIT mode user setting: true
+    Falling back to Dynamic Replacement: false
+
+
+
+== PACKAGE RESOLUTION ERRORS:
+
+    
+
+
+
+== REFERENCED SOURCE PACKAGES:
+
+    
+
+
+
+== JIT LINKAGE:
+
+    
+
+
+
+== SESSION GROUP 168:
+
+    workspace identifier: WorkspaceIdentifier(identifier: 66B7C494-C773-4735-82BD-8E0412E83557)
+    providers: [
+        Preview Provider | ContentView_Previews provider #1 in ContentView.swift [Editor(88)]
+    ]
+    translation units: [
+        /Users/okip/Desktop/QrSystem/QrSystem/ContentView.swift
+    ]
+    attributes: [
+        Editor(88):     []
+    ]
+    session: 172
+    request sessions: [
+        ContentView_Previews provider #1 in ContentView.swift: not completed
+    ]
+
+
+
+== UPDATE SESSION 172:
+
+    Start Date: Tuesday, August 5, 2025 at 14:05:49 Japan Standard Time
+    Timing {
+        Elapsed Time: 8.624302983283997s
+        38143460c29e9b78,776063149.113245,8.624302983283997s,,PreviewUpdateSession,id:172
+        fdd956d022196f22,776063149.136108,0.0017729997634887695s,,MakeBuildGraph,
+        266aea8b2863d173,776063149.147628,8.585220098495483s,,WorkspaceBuild,
+    }
+    Preview Provider {
+        Simulator {
+            platform: none
+            device: 66B93B8F-2BF6-4B40-9137-C7735E45B872 iPhone 16 Pro
+            buildNumber: 22D8075
+            runtimePath: /Library/Developer/CoreSimulator/Volumes/iOS_22D8075/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 18.3.simruntime
+        }
+    }
+    Build Graph {
+        QrSystem.app (#3)
+           sourceFile(file:///Users/okip/Desktop/QrSystem/QrSystem/ContentView.swift -> ContentView.swift) (#1)
+           ContentView.swift (#2)
+    }
+    Update Plan {
+        iOS [arm64 iphonesimulator18.2 iphonesimulator] (iPhone 16 Pro, F7ED4D58-4F85-4C89-80C6-6E0EE9EA537A-iphonesimulator18.2-arm64-iphonesimulator), [], thinning disabled, thunking enabled) {
+            Destination: iPhone 16 Pro F7ED4D58-4F85-4C89-80C6-6E0EE9EA537A | default device for iphonesimulator [
+                QrSystem app - Previews {
+                    execution point packs [
+                        [source: ContentView.swift, role: Previews] (in QrSystem)
+                    ]
+                    translation units [
+                        ContentView.swift (in QrSystem.app)
+                    ]
+                    modules [
+                        QrSystem.app
+                    ]
+                    jit link description [
+                        QrSystem.app
+                    ]
+                }
+            ]
+        }
+    }
+
+
+
+== POWER STATE LOGS:
+
+    2025/08/05, 14:04 Received power source state: Externally Powered
+    2025/08/05, 14:04 No device power state user override user default value.Current power state: Full Power
+
+
