@@ -196,8 +196,14 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField: "User-Agent")
         
+        // Add CSRF token if available
         if !userDefaultsManager.csrfToken.isEmpty {
             request.setValue(userDefaultsManager.csrfToken, forHTTPHeaderField: "X-CSRF-TOKEN")
+        }
+        
+        // Add auth token if available
+        if !userDefaultsManager.authToken.isEmpty {
+            request.setValue("Bearer \(userDefaultsManager.authToken)", forHTTPHeaderField: "Authorization")
         }
         
         if let body = body {
@@ -232,6 +238,13 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
         }
         
         if let htmlString = String(data: data, encoding: .utf8) {
+            // Extract and save CSRF token
+            if let csrfToken = extractCSRFToken(from: htmlString) {
+                DispatchQueue.main.async {
+                    self.userDefaultsManager.csrfToken = csrfToken
+                }
+            }
+            
             return parseUsersFromHTML(htmlString)
         }
         
@@ -269,11 +282,23 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
             throw APIError.invalidURL
         }
         
-        let loginData = "username=\(username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
+        // Prepare login data with CSRF token
+        var loginData = "username=\(username.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
+        
+        if !userDefaultsManager.csrfToken.isEmpty {
+            loginData += "&_token=\(userDefaultsManager.csrfToken.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "")"
+        }
         
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField: "User-Agent")
+        
+        // Add CSRF token to headers as well
+        if !userDefaultsManager.csrfToken.isEmpty {
+            request.setValue(userDefaultsManager.csrfToken, forHTTPHeaderField: "X-CSRF-TOKEN")
+        }
+        
         request.httpBody = loginData.data(using: .utf8)
         
         DispatchQueue.main.async {
