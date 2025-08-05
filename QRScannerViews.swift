@@ -773,7 +773,7 @@ struct QRScannerContainerView: View {
                 }
                 
                 QRScannerView(scannedCode: $scannedCode)
-                    .frame(height: 400)
+                    .frame(height: 300)
                     .cornerRadius(10)
                     .padding(.horizontal)
                 
@@ -890,5 +890,14 @@ struct QRScannerContainerView: View {
         alertTitle = title
         alertMessage = message
         showingAlert = true
+    }
+}
+
+@main
+struct QRScannerApp: App {
+    var body: some Scene {
+        WindowGroup {
+            EnhancedLoginView()
+        }
     }
 }
