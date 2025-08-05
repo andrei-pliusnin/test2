@@ -465,7 +465,6 @@ extension ImprovedQRScannerViewController: AVCaptureMetadataOutputObjectsDelegat
 
 struct ImprovedQRScannerView: UIViewControllerRepresentable {
     @Binding var scannedCode: String?
-    @Environment(\.presentationMode) var presentationMode
     
     func makeUIViewController(context: Context) -> ImprovedQRScannerViewController {
         let controller = ImprovedQRScannerViewController()
@@ -521,9 +520,11 @@ class UserDefaultsManager: ObservableObject {
     }
     
     func login(userName: String, token: String) {
-        self.userName = userName
-        self.csrfToken = token
-        self.isLoggedIn = true
+        DispatchQueue.main.async {
+            self.userName = userName
+            self.csrfToken = token
+            self.isLoggedIn = true
+        }
         
         UserDefaults.standard.set(true, forKey: "isLoggedIn")
         UserDefaults.standard.set(userName, forKey: "userName")
@@ -531,9 +532,11 @@ class UserDefaultsManager: ObservableObject {
     }
     
     func logout() {
-        isLoggedIn = false
-        userName = ""
-        csrfToken = ""
+        DispatchQueue.main.async {
+            self.isLoggedIn = false
+            self.userName = ""
+            self.csrfToken = ""
+        }
         
         UserDefaults.standard.set(false, forKey: "isLoggedIn")
         UserDefaults.standard.removeObject(forKey: "userName")
@@ -628,12 +631,12 @@ class EnhancedAPIService: ObservableObject {
         
         let url = URL(string: "\(userDefaultsManager.baseURL)/users")!
         
-        DispatchQueue.main.async {
+        await MainActor.run {
             self.isLoading = true
         }
         
         defer {
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.isLoading = false
             }
         }
@@ -672,12 +675,12 @@ class EnhancedAPIService: ObservableObject {
         let loginData = ["username": username]
         request.httpBody = try JSONSerialization.data(withJSONObject: loginData)
         
-        DispatchQueue.main.async {
+        await MainActor.run {
             self.isLoading = true
         }
         
         defer {
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.isLoading = false
             }
         }
@@ -695,9 +698,7 @@ class EnhancedAPIService: ObservableObject {
             
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                let token = json["csrf_token"] as? String {
-                DispatchQueue.main.async {
-                    self.userDefaultsManager.login(userName: username, token: token)
-                }
+                userDefaultsManager.login(userName: username, token: token)
                 return true
             }
             
@@ -736,12 +737,12 @@ class EnhancedAPIService: ObservableObject {
             request.setValue(userDefaultsManager.csrfToken, forHTTPHeaderField: "X-CSRF-Token")
         }
         
-        DispatchQueue.main.async {
+        await MainActor.run {
             self.isLoading = true
         }
         
         defer {
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.isLoading = false
             }
         }
@@ -810,12 +811,12 @@ class EnhancedAPIService: ObservableObject {
         
         request.httpBody = try JSONSerialization.data(withJSONObject: requestData)
         
-        DispatchQueue.main.async {
+        await MainActor.run {
             self.isLoading = true
         }
         
         defer {
-            DispatchQueue.main.async {
+            Task { @MainActor in
                 self.isLoading = false
             }
         }
@@ -877,7 +878,7 @@ struct SettingsView: View {
     @State private var serverIP = ""
     @State private var showingAlert = false
     @State private var alertMessage = ""
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         NavigationView {
@@ -935,7 +936,7 @@ struct SettingsView: View {
                 Spacer()
                 
                 Button("戻る") {
-                    presentationMode.wrappedValue.dismiss()
+                    dismiss()
                 }
                 .buttonStyle(.bordered)
                 .padding(.bottom, 50)
@@ -946,7 +947,7 @@ struct SettingsView: View {
             }
             .alert("設定", isPresented: $showingAlert) {
                 Button("OK") {
-                    presentationMode.wrappedValue.dismiss()
+                    dismiss()
                 }
             } message: {
                 Text(alertMessage)
@@ -968,7 +969,7 @@ struct SettingsView: View {
 }
 
 struct AdvancedSettingsView: View {
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         NavigationView {
@@ -985,7 +986,7 @@ struct AdvancedSettingsView: View {
                 Spacer()
                 
                 Button("戻る") {
-                    presentationMode.wrappedValue.dismiss()
+                    dismiss()
                 }
                 .buttonStyle(.bordered)
             }
@@ -1131,7 +1132,7 @@ struct EnhancedLoginView: View {
         do {
             users = try await apiService.fetchUsers()
         } catch {
-            DispatchQueue.main.async {
+            await MainActor.run {
                 self.alertMessage = "ユーザーの読み込みに失敗しました: \(error.localizedDescription)"
                 self.showingAlert = true
             }
@@ -1144,13 +1145,13 @@ struct EnhancedLoginView: View {
         do {
             let success = try await apiService.login(username: user.name)
             if !success {
-                DispatchQueue.main.async {
+                await MainActor.run {
                     self.alertMessage = "ログインに失敗しました"
                     self.showingAlert = true
                 }
             }
         } catch {
-            DispatchQueue.main.async {
+            await MainActor.run {
                 self.alertMessage = error.localizedDescription
                 self.showingAlert = true
             }
@@ -1220,7 +1221,7 @@ struct ProcessSelectionView: View {
                                     Text(company.name).tag(Company?.some(company))
                                 }
                             }
-                            .onChange(of: selectedCompany) { _ in
+                            .onChange(of: selectedCompany) { newValue in
                                 selectedGroup = nil
                                 selectedLocation = nil
                                 loadGroups()
@@ -1233,7 +1234,7 @@ struct ProcessSelectionView: View {
                                         Text(group.name).tag(Group?.some(group))
                                     }
                                 }
-                                .onChange(of: selectedGroup) { _ in
+                                .onChange(of: selectedGroup) { newValue in
                                     selectedLocation = nil
                                     loadLocations()
                                 }
@@ -1302,7 +1303,7 @@ struct ProcessSelectionView: View {
         do {
             companies = try await apiService.fetchCompanies()
         } catch {
-            DispatchQueue.main.async {
+            await MainActor.run {
                 if let apiError = error as? APIError,
                    case .serverError(let code) = apiError,
                    code == 401 {
@@ -1323,7 +1324,7 @@ struct ProcessSelectionView: View {
             do {
                 groups = try await apiService.fetchGroups(for: companyId)
             } catch {
-                DispatchQueue.main.async {
+                await MainActor.run {
                     if let apiError = error as? APIError,
                        case .serverError(let code) = apiError,
                        code == 401 {
@@ -1345,7 +1346,7 @@ struct ProcessSelectionView: View {
             do {
                 locations = try await apiService.fetchLocations(for: groupId)
             } catch {
-                DispatchQueue.main.async {
+                await MainActor.run {
                     if let apiError = error as? APIError,
                        case .serverError(let code) = apiError,
                        code == 401 {
@@ -1380,7 +1381,7 @@ struct ImprovedQRScannerContainerView: View {
     @State private var showingDiagnostics = false
     @State private var diagnosticsInfo = ""
     
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         NavigationView {
@@ -1398,7 +1399,7 @@ struct ImprovedQRScannerContainerView: View {
                     .controlSize(.small)
                     
                     Button("戻る") {
-                        presentationMode.wrappedValue.dismiss()
+                        dismiss()
                     }
                     .buttonStyle(.borderedProminent)
                 }
@@ -1463,8 +1464,8 @@ struct ImprovedQRScannerContainerView: View {
                 }
             }
             .navigationBarHidden(true)
-            .onChange(of: scannedCode) { code in
-                if let code = code {
+            .onChange(of: scannedCode) { newValue in
+                if let code = newValue {
                     processScannedCode(code)
                     scannedCode = nil
                 }
@@ -1533,7 +1534,7 @@ struct ImprovedQRScannerContainerView: View {
                     note: note
                 )
                 
-                DispatchQueue.main.async {
+                await MainActor.run {
                     if result.success {
                         if let item = result.item {
                             self.scannedItems.append(item)
@@ -1547,7 +1548,7 @@ struct ImprovedQRScannerContainerView: View {
                     }
                 }
             } catch {
-                DispatchQueue.main.async {
+                await MainActor.run {
                     VibrationHelper.error()
                     
                     var errorMessage = ""
@@ -1601,7 +1602,7 @@ struct ImprovedQRScannerContainerView: View {
 
 struct DiagnosticsView: View {
     let diagnosticsInfo: String
-    @Environment(\.presentationMode) var presentationMode
+    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         NavigationView {
@@ -1627,7 +1628,7 @@ struct DiagnosticsView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("閉じる") {
-                        presentationMode.wrappedValue.dismiss()
+                        dismiss()
                     }
                 }
             }
