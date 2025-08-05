@@ -20,10 +20,6 @@
 	<string>1</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
-	
-	<!-- =============================================== -->
-	<!-- UI Configuration -->
-	<!-- =============================================== -->
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -50,105 +46,19 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	
-	<!-- =============================================== -->
-	<!-- PRIVACY PERMISSIONS (REQUIRED) -->
-	<!-- =============================================== -->
-	
-	<!-- Camera Permission (ESSENTIAL for QR Scanner) -->
 	<key>NSCameraUsageDescription</key>
 	<string>このアプリはQRコードをスキャンするためにカメラを使用します。</string>
-	
-	<!-- Photo Library Permissions -->
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>QRコードの画像を保存または読み込むために写真ライブラリへのアクセスが必要です。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>スキャンしたQRコードの画像を写真ライブラリに保存します。</string>
-	
-	<!-- Microphone Permission -->
-	<key>NSMicrophoneUsageDescription</key>
-	<string>音声メモやビデオ録画機能のためにマイクを使用します。</string>
-	
-	<!-- Location Permissions -->
-	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>QRコードスキャン時の位置情報を記録するために位置情報を使用します。</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>QRコードスキャン時の位置情報を記録するために位置情報を使用します。</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>QRコードスキャン時の位置情報を記録するために位置情報を使用します。</string>
-	
-	<!-- Motion and Fitness -->
-	<key>NSMotionUsageDescription</key>
-	<string>デバイスの動きを検出してユーザー体験を向上させます。</string>
-	
-	<!-- Contacts -->
-	<key>NSContactsUsageDescription</key>
-	<string>QRコードから連絡先情報を保存するために連絡先へのアクセスが必要です。</string>
-	
-	<!-- Calendar -->
-	<key>NSCalendarsUsageDescription</key>
-	<string>QRコードからイベント情報をカレンダーに保存します。</string>
-	
-	<!-- Reminders -->
-	<key>NSRemindersUsageDescription</key>
-	<string>QRコードからリマインダーを作成するためにリマインダーへのアクセスが必要です。</string>
-	
-	<!-- Face ID / Touch ID -->
-	<key>NSFaceIDUsageDescription</key>
-	<string>アプリへの安全なアクセスのためにFace IDを使用します。</string>
-	
-	<!-- Speech Recognition -->
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>音声入力機能のために音声認識を使用します。</string>
-	
-	<!-- Bluetooth -->
-	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>近くのデバイスとの通信にBluetoothを使用します。</string>
-	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>近くのデバイスとの通信にBluetoothを使用します。</string>
-	
-	<!-- Local Network -->
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>ローカルネットワーク上のデバイスに接続するためにローカルネットワークへのアクセスが必要です。</string>
-	
-	<!-- Music Library -->
-	<key>NSAppleMusicUsageDescription</key>
-	<string>音楽ライブラリへのアクセスが必要です。</string>
-	
-	<!-- =============================================== -->
-	<!-- NETWORK SECURITY SETTINGS -->
-	<!-- =============================================== -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<!-- Allow all HTTP connections for development -->
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-		<!-- Allow local network connections -->
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
-		<!-- Allow arbitrary loads in web content -->
-		<key>NSAllowsArbitraryLoadsInWebContent</key>
-		<true/>
-		<!-- Exception domains for specific servers -->
 		<key>NSExceptionDomains</key>
 		<dict>
-			<!-- Example: your Laravel server -->
 			<key>localhost</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-				<key>NSExceptionMinimumTLSVersion</key>
-				<string>TLSv1.0</string>
-			</dict>
-			<key>192.168.1.100</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-				<key>NSExceptionMinimumTLSVersion</key>
-				<string>TLSv1.0</string>
-			</dict>
-			<!-- Add your production domain here -->
-			<key>your-production-server.com</key>
 			<dict>
 				<key>NSExceptionAllowsInsecureHTTPLoads</key>
 				<true/>
@@ -157,27 +67,6 @@
 			</dict>
 		</dict>
 	</dict>
-	
-	<!-- =============================================== -->
-	<!-- BACKGROUND MODES (if needed) -->
-	<!-- =============================================== -->
-	<key>UIBackgroundModes</key>
-	<array>
-		<string>background-processing</string>
-		<string>background-fetch</string>
-	</array>
-	
-	<!-- =============================================== -->
-	<!-- FILE SHARING (if needed) -->
-	<!-- =============================================== -->
-	<key>UIFileSharingEnabled</key>
-	<true/>
-	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<true/>
-	
-	<!-- =============================================== -->
-	<!-- URL SCHEMES (if needed) -->
-	<!-- =============================================== -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -189,44 +78,9 @@
 			</array>
 		</dict>
 	</array>
-	
-	<!-- =============================================== -->
-	<!-- EXPORTED TYPE IDENTIFIERS (if needed) -->
-	<!-- =============================================== -->
-	<key>UTExportedTypeDeclarations</key>
-	<array>
-		<dict>
-			<key>UTTypeIdentifier</key>
-			<string>com.example.qrcode</string>
-			<key>UTTypeDescription</key>
-			<string>QR Code Data</string>
-			<key>UTTypeConformsTo</key>
-			<array>
-				<string>public.data</string>
-			</array>
-			<key>UTTypeTagSpecification</key>
-			<dict>
-				<key>public.filename-extension</key>
-				<array>
-					<string>qr</string>
-				</array>
-			</dict>
-		</dict>
-	</array>
-	
-	<!-- =============================================== -->
-	<!-- SECURITY SETTINGS -->
-	<!-- =============================================== -->
-	
-	<!-- Prevent screenshots in app switcher (optional) -->
-	<key>UIApplicationExitsOnSuspend</key>
-	<false/>
-	
-	<!-- Status bar appearance -->
 	<key>UIStatusBarStyle</key>
 	<string>UIStatusBarStyleDefault</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
-	
 </dict>
 </plist>
