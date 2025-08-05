@@ -461,7 +461,7 @@ struct ProcessSelectionView: View {
                 }
                 .padding(.horizontal)
                 
-                if apiService?.isLoading == true {
+                if let api = apiService, api.isLoading {
                     ProgressView("読み込み中...")
                         .scaleEffect(1.2)
                         .padding()
@@ -537,10 +537,10 @@ struct ProcessSelectionView: View {
                 // Initialize apiService with the injected userDefaultsManager
                 if apiService == nil {
                     apiService = EnhancedAPIService(userDefaultsManager: userDefaultsManager)
+                    Task {
+                        await loadCompanies()
+                    }
                 }
-            }
-            .task {
-                await loadCompanies()
             }
             .alert("エラー", isPresented: $showingAlert) {
                 Button("OK") { }
