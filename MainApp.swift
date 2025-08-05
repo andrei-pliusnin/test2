@@ -92,6 +92,8 @@ enum APIError: LocalizedError {
     case decodingError
     case networkError(String)
     case serverError(Int)
+    case unauthorized
+    case csrfTokenMissing
     
     var errorDescription: String? {
         switch self {
@@ -104,7 +106,26 @@ enum APIError: LocalizedError {
         case .networkError(let message):
             return "ネットワークエラー: \(message)"
         case .serverError(let code):
-            return "サーバーエラー: \(code)"
+            switch code {
+            case 401:
+                return "認証エラー: ログインが必要です"
+            case 403:
+                return "アクセス拒否: 権限がありません"
+            case 404:
+                return "リソースが見つかりません"
+            case 419:
+                return "CSRFトークンエラー: ページを再読み込みしてください"
+            case 422:
+                return "入力データエラー: 入力内容を確認してください"
+            case 500:
+                return "サーバーエラー: しばらく時間をおいて再試行してください"
+            default:
+                return "サーバーエラー: \(code)"
+            }
+        case .unauthorized:
+            return "認証が必要です。再度ログインしてください。"
+        case .csrfTokenMissing:
+            return "CSRFトークンが見つかりません。ページを再読み込みしてください。"
         }
     }
 }
@@ -167,6 +188,12 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
         config.timeoutIntervalForResource = 60
+        
+        // Enable cookie storage for session management
+        config.httpCookieStorage = HTTPCookieStorage.shared
+        config.httpCookieAcceptPolicy = .always
+        config.httpShouldSetCookies = true
+        
         return URLSession(configuration: config, delegate: self, delegateQueue: nil)
     }()
     
@@ -339,18 +366,38 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
             }
         }
         
-        let (_, response) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.networkError("Invalid response")
         }
         
+        // Log response for debugging
+        #if DEBUG
+        print("🔐 Login Response Status: \(httpResponse.statusCode)")
+        if let responseData = String(data: data, encoding: .utf8) {
+            print("🔐 Login Response Data: \(responseData.prefix(500))")
+        }
+        print("🔐 Login Response Headers: \(httpResponse.allHeaderFields)")
+        #endif
+        
         if httpResponse.statusCode == 302 || httpResponse.statusCode == 200 {
+            // Extract session cookie or auth token if available
+            if let setCookieHeader = httpResponse.allHeaderFields["Set-Cookie"] as? String {
+                print("🍪 Session Cookie: \(setCookieHeader)")
+            }
+            
             DispatchQueue.main.async {
                 self.userDefaultsManager.userName = username
                 self.userDefaultsManager.isLoggedIn = true
             }
             return true
+        } else if httpResponse.statusCode == 419 {
+            // CSRF token mismatch
+            throw APIError.serverError(419)
+        } else if httpResponse.statusCode == 422 {
+            // Validation error
+            throw APIError.networkError("Validation failed - check username")
         }
         
         throw APIError.serverError(httpResponse.statusCode)
@@ -374,17 +421,33 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
         
         let (data, response) = try await session.data(for: request)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 0)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.networkError("Invalid response")
         }
         
-        do {
-            return try JSONDecoder().decode([Company].self, from: data)
-        } catch {
-            print("Decoding error: \(error)")
-            print("Response data: \(String(data: data, encoding: .utf8) ?? "No data")")
-            throw APIError.decodingError
+        #if DEBUG
+        print("🏢 Companies Response Status: \(httpResponse.statusCode)")
+        if let responseData = String(data: data, encoding: .utf8) {
+            print("🏢 Companies Response: \(responseData.prefix(200))")
+        }
+        #endif
+        
+        if httpResponse.statusCode == 401 {
+            // Unauthorized - user needs to login again
+            DispatchQueue.main.async {
+                self.userDefaultsManager.logout()
+            }
+            throw APIError.serverError(401)
+        } else if httpResponse.statusCode == 200 {
+            do {
+                return try JSONDecoder().decode([Company].self, from: data)
+            } catch {
+                print("🏢 Decoding error: \(error)")
+                print("🏢 Response data: \(String(data: data, encoding: .utf8) ?? "No data")")
+                throw APIError.decodingError
+            }
+        } else {
+            throw APIError.serverError(httpResponse.statusCode)
         }
     }
     
@@ -406,17 +469,28 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
         
         let (data, response) = try await session.data(for: request)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 0)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.networkError("Invalid response")
         }
         
-        do {
-            return try JSONDecoder().decode([Group].self, from: data)
-        } catch {
-            print("Decoding error: \(error)")
-            print("Response data: \(String(data: data, encoding: .utf8) ?? "No data")")
-            throw APIError.decodingError
+        #if DEBUG
+        print("👥 Groups Response Status: \(httpResponse.statusCode)")
+        #endif
+        
+        if httpResponse.statusCode == 401 {
+            DispatchQueue.main.async {
+                self.userDefaultsManager.logout()
+            }
+            throw APIError.unauthorized
+        } else if httpResponse.statusCode == 200 {
+            do {
+                return try JSONDecoder().decode([Group].self, from: data)
+            } catch {
+                print("👥 Decoding error: \(error)")
+                throw APIError.decodingError
+            }
+        } else {
+            throw APIError.serverError(httpResponse.statusCode)
         }
     }
     
@@ -438,17 +512,28 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
         
         let (data, response) = try await session.data(for: request)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
-            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 0)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.networkError("Invalid response")
         }
         
-        do {
-            return try JSONDecoder().decode([Location].self, from: data)
-        } catch {
-            print("Decoding error: \(error)")
-            print("Response data: \(String(data: data, encoding: .utf8) ?? "No data")")
-            throw APIError.decodingError
+        #if DEBUG
+        print("📍 Locations Response Status: \(httpResponse.statusCode)")
+        #endif
+        
+        if httpResponse.statusCode == 401 {
+            DispatchQueue.main.async {
+                self.userDefaultsManager.logout()
+            }
+            throw APIError.unauthorized
+        } else if httpResponse.statusCode == 200 {
+            do {
+                return try JSONDecoder().decode([Location].self, from: data)
+            } catch {
+                print("📍 Decoding error: \(error)")
+                throw APIError.decodingError
+            }
+        } else {
+            throw APIError.serverError(httpResponse.statusCode)
         }
     }
     
@@ -485,18 +570,30 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
             throw APIError.networkError("Invalid response")
         }
         
-        if httpResponse.statusCode == 200 {
+        #if DEBUG
+        print("🔄 Update Status Response Status: \(httpResponse.statusCode)")
+        if let responseData = String(data: data, encoding: .utf8) {
+            print("🔄 Update Status Response: \(responseData)")
+        }
+        #endif
+        
+        if httpResponse.statusCode == 401 {
+            DispatchQueue.main.async {
+                self.userDefaultsManager.logout()
+            }
+            throw APIError.unauthorized
+        } else if httpResponse.statusCode == 200 {
             do {
                 return try JSONDecoder().decode(ScanResult.self, from: data)
             } catch {
-                print("Decoding error: \(error)")
-                print("Response data: \(String(data: data, encoding: .utf8) ?? "No data")")
+                print("🔄 Decoding error: \(error)")
+                print("🔄 Response data: \(String(data: data, encoding: .utf8) ?? "No data")")
                 throw APIError.decodingError
             }
         } else {
-            print("Server error. Status code: \(httpResponse.statusCode)")
+            print("🔄 Server error. Status code: \(httpResponse.statusCode)")
             if let errorData = String(data: data, encoding: .utf8) {
-                print("Error response: \(errorData)")
+                print("🔄 Error response: \(errorData)")
             }
             throw APIError.serverError(httpResponse.statusCode)
         }
