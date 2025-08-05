@@ -425,7 +425,7 @@ struct EnhancedLoginView: View {
 // MARK: - Process Selection View
 struct ProcessSelectionView: View {
     @EnvironmentObject var userDefaultsManager: UserDefaultsManager
-    @StateObject private var apiService: EnhancedAPIService
+    @State private var apiService: EnhancedAPIService?
     
     @State private var selectedProcess: ProcessType = .shipping
     @State private var selectedCompany: Company?
@@ -440,12 +440,6 @@ struct ProcessSelectionView: View {
     @State private var showingScanner = false
     @State private var showingAlert = false
     @State private var alertMessage = ""
-    
-    init() {
-        // Initialize apiService with a temporary UserDefaultsManager
-        // This will be properly set in onAppear
-        _apiService = StateObject(wrappedValue: EnhancedAPIService(userDefaultsManager: UserDefaultsManager()))
-    }
     
     var canProceed: Bool {
         selectedProcess == .return_ || selectedProcess == .disposal || selectedCompany != nil
@@ -467,7 +461,7 @@ struct ProcessSelectionView: View {
                 }
                 .padding(.horizontal)
                 
-                if apiService.isLoading {
+                if apiService?.isLoading == true {
                     ProgressView("読み込み中...")
                         .scaleEffect(1.2)
                         .padding()
@@ -540,8 +534,10 @@ struct ProcessSelectionView: View {
             .navigationTitle("処理選択")
             .navigationBarHidden(true)
             .onAppear {
-                // Properly initialize apiService with the injected userDefaultsManager
-                apiService.userDefaultsManager = userDefaultsManager
+                // Initialize apiService with the injected userDefaultsManager
+                if apiService == nil {
+                    apiService = EnhancedAPIService(userDefaultsManager: userDefaultsManager)
+                }
             }
             .task {
                 await loadCompanies()
@@ -552,20 +548,23 @@ struct ProcessSelectionView: View {
                 Text(alertMessage)
             }
             .fullScreenCover(isPresented: $showingScanner) {
-                QRScannerContainerView(
-                    selectedProcess: selectedProcess,
-                    selectedCompany: selectedCompany,
-                    selectedGroup: selectedGroup,
-                    selectedLocation: selectedLocation,
-                    note: note,
-                    userName: userDefaultsManager.userName,
-                    apiService: apiService
-                )
+                if let apiService = apiService {
+                    QRScannerContainerView(
+                        selectedProcess: selectedProcess,
+                        selectedCompany: selectedCompany,
+                        selectedGroup: selectedGroup,
+                        selectedLocation: selectedLocation,
+                        note: note,
+                        userName: userDefaultsManager.userName,
+                        apiService: apiService
+                    )
+                }
             }
         }
     }
     
     private func loadCompanies() async {
+        guard let apiService = apiService else { return }
         do {
             companies = try await apiService.fetchCompanies()
         } catch {
@@ -577,7 +576,8 @@ struct ProcessSelectionView: View {
     }
     
     private func loadGroups() {
-        guard let companyId = selectedCompany?.id else { return }
+        guard let companyId = selectedCompany?.id,
+              let apiService = apiService else { return }
         
         Task {
             do {
@@ -592,7 +592,8 @@ struct ProcessSelectionView: View {
     }
     
     private func loadLocations() {
-        guard let groupId = selectedGroup?.id else { return }
+        guard let groupId = selectedGroup?.id,
+              let apiService = apiService else { return }
         
         Task {
             do {
