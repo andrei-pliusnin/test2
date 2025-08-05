@@ -410,6 +410,7 @@ struct AdvancedSettingsView: View {
                             Text("Server: \(userDefaultsManager.baseURL)")
                             Text("User: \(userDefaultsManager.userName)")
                             Text("Status: \(userDefaultsManager.isLoggedIn ? "ログイン済み" : "未ログイン")")
+                            Text("CSRF Token: \(userDefaultsManager.csrfToken.isEmpty ? "❌ Missing" : "✅ Available")")
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding()
