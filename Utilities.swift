@@ -72,17 +72,25 @@ class UserDefaultsManager: ObservableObject {
         }
     }
     
+    @Published var csrfToken: String {
+        didSet {
+            userDefaults.set(csrfToken, forKey: "csrfToken")
+        }
+    }
+    
     init() {
         self.isLoggedIn = userDefaults.bool(forKey: "isLoggedIn")
         self.userName = userDefaults.string(forKey: "userName") ?? ""
         self.authToken = userDefaults.string(forKey: "authToken") ?? ""
         self.baseURL = userDefaults.string(forKey: "baseURL") ?? ""
+        self.csrfToken = userDefaults.string(forKey: "csrfToken") ?? ""
     }
     
     func logout() {
         isLoggedIn = false
         userName = ""
         authToken = ""
+        csrfToken = ""
     }
 }
 
@@ -120,9 +128,10 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        request.setValue("Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15", forHTTPHeaderField: "User-Agent")
         
-        if !userDefaultsManager.authToken.isEmpty {
-            request.setValue(userDefaultsManager.authToken, forHTTPHeaderField: "X-CSRF-TOKEN")
+        if !userDefaultsManager.csrfToken.isEmpty {
+            request.setValue(userDefaultsManager.csrfToken, forHTTPHeaderField: "X-CSRF-TOKEN")
         }
         
         if let body = body {
@@ -171,13 +180,36 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
                 let value = String(html[valueRange])
                 let name = String(html[nameRange])
                 
-                if !value.isEmpty && value != "" {
-                    users.append(User(id: nil, name: name, email: nil))
+                if !value.isEmpty && value != "" && value != "disabled" && value != "selected" {
+                    let user = User(id: users.count, name: name, email: nil)
+                    if !users.contains(where: { $0.name == name }) {
+                        users.append(user)
+                    }
                 }
             }
         }
         
         return users
+    }
+    
+    private func extractCSRFToken(from html: String) -> String? {
+        let patterns = [
+            #"<meta name="csrf-token" content="([^"]+)""#,
+            #"<input[^>]*name="_token"[^>]*value="([^"]+)""#,
+            #"_token['"]\s*:\s*['"]([^'"]+)['"]"#
+        ]
+        
+        for pattern in patterns {
+            let regex = try! NSRegularExpression(pattern: pattern)
+            let range = NSRange(location: 0, length: html.utf16.count)
+            
+            if let match = regex.firstMatch(in: html, range: range),
+               let tokenRange = Range(match.range(at: 1), in: html) {
+                return String(html[tokenRange])
+            }
+        }
+        
+        return nil
     }
     
     func login(username: String) async throws -> Bool {
@@ -432,7 +464,7 @@ struct SettingsView: View {
 
 struct EnhancedLoginView: View {
     @StateObject private var userDefaultsManager = UserDefaultsManager()
-    @StateObject private var apiService: EnhancedAPIService
+    @State private var apiService: EnhancedAPIService?
     
     @State private var users: [User] = []
     @State private var selectedUser: User?
@@ -440,11 +472,6 @@ struct EnhancedLoginView: View {
     @State private var alertMessage = ""
     @State private var showingSettings = false
     @State private var showingAdvancedSettings = false
-    
-    init() {
-        let userDefaults = UserDefaultsManager()
-        _apiService = StateObject(wrappedValue: EnhancedAPIService(userDefaultsManager: userDefaults))
-    }
     
     var body: some View {
         NavigationView {
@@ -478,7 +505,7 @@ struct EnhancedLoginView: View {
                             .controlSize(.large)
                         }
                     } else {
-                        if users.isEmpty && !apiService.isLoading {
+                        if users.isEmpty && apiService?.isLoading != true {
                             Button("ユーザーを読み込む") {
                                 Task {
                                     await loadUsers()
@@ -508,7 +535,7 @@ struct EnhancedLoginView: View {
                             .disabled(selectedUser == nil || apiService.isLoading)
                         }
                         
-                        if apiService.isLoading {
+                        if apiService?.isLoading == true {
                             ProgressView("読み込み中...")
                                 .scaleEffect(1.2)
                                 .padding()
@@ -552,6 +579,9 @@ struct EnhancedLoginView: View {
                     .environmentObject(userDefaultsManager)
             }
             .onAppear {
+                if apiService == nil {
+                    apiService = EnhancedAPIService(userDefaultsManager: userDefaultsManager)
+                }
                 if !userDefaultsManager.baseURL.isEmpty && users.isEmpty {
                     Task {
                         await loadUsers()
@@ -562,6 +592,7 @@ struct EnhancedLoginView: View {
     }
     
     private func loadUsers() async {
+        guard let apiService = apiService else { return }
         do {
             users = try await apiService.fetchUsers()
         } catch {
@@ -571,7 +602,8 @@ struct EnhancedLoginView: View {
     }
     
     private func performLogin() async {
-        guard let user = selectedUser else { return }
+        guard let user = selectedUser,
+              let apiService = apiService else { return }
         
         do {
             let success = try await apiService.login(username: user.name)
@@ -588,7 +620,7 @@ struct EnhancedLoginView: View {
 
 struct EnhancedProcessSelectionView: View {
     @EnvironmentObject var userDefaultsManager: UserDefaultsManager
-    @StateObject private var apiService: EnhancedAPIService
+    @State private var apiService: EnhancedAPIService?
     
     @State private var selectedProcess: ProcessType = .shipping
     @State private var selectedCompany: Company?
@@ -603,10 +635,6 @@ struct EnhancedProcessSelectionView: View {
     @State private var showingScanner = false
     @State private var showingAlert = false
     @State private var alertMessage = ""
-    
-    init() {
-        _apiService = StateObject(wrappedValue: EnhancedAPIService(userDefaultsManager: UserDefaultsManager()))
-    }
     
     var canProceed: Bool {
         selectedProcess == .return_ || selectedProcess == .disposal || selectedCompany != nil
@@ -700,6 +728,11 @@ struct EnhancedProcessSelectionView: View {
             }
             .navigationTitle("処理選択")
             .navigationBarHidden(true)
+            .onAppear {
+                if apiService == nil {
+                    apiService = EnhancedAPIService(userDefaultsManager: userDefaultsManager)
+                }
+            }
             .task {
                 await loadCompanies()
             }
@@ -709,20 +742,23 @@ struct EnhancedProcessSelectionView: View {
                 Text(alertMessage)
             }
             .fullScreenCover(isPresented: $showingScanner) {
-                EnhancedQRScannerContainerView(
-                    selectedProcess: selectedProcess,
-                    selectedCompany: selectedCompany,
-                    selectedGroup: selectedGroup,
-                    selectedLocation: selectedLocation,
-                    note: note,
-                    userName: userDefaultsManager.userName,
-                    apiService: apiService
-                )
+                if let apiService = apiService {
+                    EnhancedQRScannerContainerView(
+                        selectedProcess: selectedProcess,
+                        selectedCompany: selectedCompany,
+                        selectedGroup: selectedGroup,
+                        selectedLocation: selectedLocation,
+                        note: note,
+                        userName: userDefaultsManager.userName,
+                        apiService: apiService
+                    )
+                }
             }
         }
     }
     
     private func loadCompanies() async {
+        guard let apiService = apiService else { return }
         do {
             companies = try await apiService.fetchCompanies()
         } catch {
@@ -732,7 +768,8 @@ struct EnhancedProcessSelectionView: View {
     }
     
     private func loadGroups() {
-        guard let companyId = selectedCompany?.id else { return }
+        guard let companyId = selectedCompany?.id,
+              let apiService = apiService else { return }
         
         Task {
             do {
@@ -745,7 +782,8 @@ struct EnhancedProcessSelectionView: View {
     }
     
     private func loadLocations() {
-        guard let groupId = selectedGroup?.id else { return }
+        guard let groupId = selectedGroup?.id,
+              let apiService = apiService else { return }
         
         Task {
             do {
