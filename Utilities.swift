@@ -464,7 +464,7 @@ struct SettingsView: View {
 
 struct EnhancedLoginView: View {
     @StateObject private var userDefaultsManager = UserDefaultsManager()
-    @State private var apiService: EnhancedAPIService?
+    @StateObject private var apiService: EnhancedAPIService
     
     @State private var users: [User] = []
     @State private var selectedUser: User?
@@ -472,6 +472,12 @@ struct EnhancedLoginView: View {
     @State private var alertMessage = ""
     @State private var showingSettings = false
     @State private var showingAdvancedSettings = false
+    
+    init() {
+        let sharedUserDefaults = UserDefaultsManager()
+        _userDefaultsManager = StateObject(wrappedValue: sharedUserDefaults)
+        _apiService = StateObject(wrappedValue: EnhancedAPIService(userDefaultsManager: sharedUserDefaults))
+    }
     
     var body: some View {
         NavigationView {
@@ -505,7 +511,7 @@ struct EnhancedLoginView: View {
                             .controlSize(.large)
                         }
                     } else {
-                        if users.isEmpty && apiService?.isLoading != true {
+                        if users.isEmpty && !apiService.isLoading {
                             Button("ユーザーを読み込む") {
                                 Task {
                                     await loadUsers()
@@ -579,9 +585,6 @@ struct EnhancedLoginView: View {
                     .environmentObject(userDefaultsManager)
             }
             .onAppear {
-                if apiService == nil {
-                    apiService = EnhancedAPIService(userDefaultsManager: userDefaultsManager)
-                }
                 if !userDefaultsManager.baseURL.isEmpty && users.isEmpty {
                     Task {
                         await loadUsers()
@@ -592,7 +595,6 @@ struct EnhancedLoginView: View {
     }
     
     private func loadUsers() async {
-        guard let apiService = apiService else { return }
         do {
             users = try await apiService.fetchUsers()
         } catch {
@@ -602,8 +604,7 @@ struct EnhancedLoginView: View {
     }
     
     private func performLogin() async {
-        guard let user = selectedUser,
-              let apiService = apiService else { return }
+        guard let user = selectedUser else { return }
         
         do {
             let success = try await apiService.login(username: user.name)
