@@ -162,7 +162,7 @@ class UserDefaultsManager: ObservableObject {
 // MARK: - Enhanced API Service
 class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
     @Published var isLoading = false
-    private let userDefaultsManager: UserDefaultsManager
+    let userDefaultsManager: UserDefaultsManager
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
