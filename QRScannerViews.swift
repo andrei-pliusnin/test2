@@ -23,7 +23,17 @@ class QRScannerViewController: UIViewController {
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        startScanning()
+        // Only start scanning if capture session is already initialized
+        if captureSession != nil {
+            startScanning()
+        }
+        // If capture session is not initialized, startScanning will be called 
+        // from initializeCaptureSession after setup is complete
+    }
+    
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        previewLayer?.frame = view.layer.bounds
     }
     
     override func viewWillDisappear(_ animated: Bool) {
@@ -90,6 +100,11 @@ class QRScannerViewController: UIViewController {
         
         let overlayView = createScanningOverlay()
         view.addSubview(overlayView)
+        
+        // Now that capture session is initialized, start scanning if view is visible
+        if view.window != nil {
+            startScanning()
+        }
     }
     
     private func showCameraPermissionAlert() {
@@ -140,8 +155,29 @@ class QRScannerViewController: UIViewController {
             scanArea.heightAnchor.constraint(equalToConstant: 250)
         ])
         
+        // Create scanning instruction label
+        let instructionLabel = UILabel()
+        instructionLabel.text = "QRコードをスキャンしてください"
+        instructionLabel.textColor = UIColor.white
+        instructionLabel.font = UIFont.systemFont(ofSize: 16, weight: .medium)
+        instructionLabel.textAlignment = .center
+        instructionLabel.translatesAutoresizingMaskIntoConstraints = false
+        
+        overlayView.addSubview(instructionLabel)
+        NSLayoutConstraint.activate([
+            instructionLabel.centerXAnchor.constraint(equalTo: overlayView.centerXAnchor),
+            instructionLabel.topAnchor.constraint(equalTo: scanArea.bottomAnchor, constant: 20)
+        ])
+        
+        // Create mask for the overlay
         let path = UIBezierPath(rect: overlayView.bounds)
-        let scanAreaPath = UIBezierPath(roundedRect: CGRect(x: (view.bounds.width - 250) / 2, y: (view.bounds.height - 250) / 2, width: 250, height: 250), cornerRadius: 10)
+        let scanAreaRect = CGRect(
+            x: (view.bounds.width - 250) / 2,
+            y: (view.bounds.height - 250) / 2,
+            width: 250,
+            height: 250
+        )
+        let scanAreaPath = UIBezierPath(roundedRect: scanAreaRect, cornerRadius: 10)
         path.append(scanAreaPath.reversing())
         
         let maskLayer = CAShapeLayer()
@@ -152,14 +188,23 @@ class QRScannerViewController: UIViewController {
     }
     
     private func startScanning() {
+        guard let captureSession = captureSession else {
+            print("⚠️ Capture session not initialized yet")
+            return
+        }
+        
         if !captureSession.isRunning {
             DispatchQueue.global(qos: .background).async {
-                self.captureSession.startRunning()
+                captureSession.startRunning()
             }
         }
     }
     
     private func stopScanning() {
+        guard let captureSession = captureSession else {
+            return
+        }
+        
         if captureSession.isRunning {
             captureSession.stopRunning()
         }
