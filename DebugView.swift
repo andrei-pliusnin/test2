@@ -16,29 +16,75 @@ struct DebugView: View {
         isLoading = true
         testResults += "\n=== Testing Login ===\n"
         testResults += "URL: \(userDefaultsManager.baseURL)/login\n"
-        testResults += "CSRF Token: \(userDefaultsManager.csrfToken.isEmpty ? "❌ Missing" : "✅ \(userDefaultsManager.csrfToken.prefix(10))...")\n"
+        testResults += "CSRF Token: \(userDefaultsManager.csrfToken.isEmpty ? "❌ Missing" : "✅ \(userDefaultsManager.csrfToken.prefix(20))...")\n"
         
-        Task {
-            do {
-                let users = try await apiService.fetchUsers()
-                if let firstUser = users.first {
-                    testResults += "Testing login with user: \(firstUser.name)\n"
+        // Check if we have CSRF token first
+        if userDefaultsManager.csrfToken.isEmpty {
+            testResults += "⚠️ No CSRF token found. Fetching users first to get token...\n"
+            
+            Task {
+                do {
+                    // First fetch users to get CSRF token
+                    let users = try await apiService.fetchUsers()
                     
-                    let success = try await apiService.login(username: firstUser.name)
                     DispatchQueue.main.async {
-                        self.testResults += success ? "✅ Login successful!\n" : "❌ Login failed\n"
-                        self.isLoading = false
+                        self.testResults += "✅ Fetched \(users.count) users and CSRF token\n"
+                        self.testResults += "CSRF Token: \(self.userDefaultsManager.csrfToken.isEmpty ? "❌ Still Missing" : "✅ \(self.userDefaultsManager.csrfToken.prefix(20))...")\n"
+                        
+                        // Now try login with first user
+                        if let firstUser = users.first {
+                            self.testResults += "Testing login with user: \(firstUser.name)\n"
+                            
+                            Task {
+                                do {
+                                    let success = try await self.apiService.login(username: firstUser.name)
+                                    DispatchQueue.main.async {
+                                        self.testResults += success ? "✅ Login successful!\n" : "❌ Login failed\n"
+                                        self.isLoading = false
+                                    }
+                                } catch {
+                                    DispatchQueue.main.async {
+                                        self.testResults += "❌ Login Error: \(error.localizedDescription)\n"
+                                        self.isLoading = false
+                                    }
+                                }
+                            }
+                        } else {
+                            self.testResults += "❌ No users found to test login\n"
+                            self.isLoading = false
+                        }
                     }
-                } else {
+                } catch {
                     DispatchQueue.main.async {
-                        self.testResults += "❌ No users found to test login\n"
+                        self.testResults += "❌ Error fetching users: \(error.localizedDescription)\n"
                         self.isLoading = false
                     }
                 }
-            } catch {
-                DispatchQueue.main.async {
-                    self.testResults += "❌ Login Error: \(error.localizedDescription)\n"
-                    self.isLoading = false
+            }
+        } else {
+            // We have CSRF token, proceed with login test
+            Task {
+                do {
+                    let users = try await apiService.fetchUsers()
+                    if let firstUser = users.first {
+                        testResults += "Testing login with user: \(firstUser.name)\n"
+                        
+                        let success = try await apiService.login(username: firstUser.name)
+                        DispatchQueue.main.async {
+                            self.testResults += success ? "✅ Login successful!\n" : "❌ Login failed\n"
+                            self.isLoading = false
+                        }
+                    } else {
+                        DispatchQueue.main.async {
+                            self.testResults += "❌ No users found to test login\n"
+                            self.isLoading = false
+                        }
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        self.testResults += "❌ Login Error: \(error.localizedDescription)\n"
+                        self.isLoading = false
+                    }
                 }
             }
         }
@@ -134,7 +180,7 @@ struct DebugView: View {
                     for (index, user) in users.enumerated() {
                         self.testResults += "- [\(index)] \(user.name)\n"
                     }
-                    self.testResults += "CSRF Token: \(self.userDefaultsManager.csrfToken.isEmpty ? "❌ Missing" : "✅ Found")\n"
+                    self.testResults += "CSRF Token: \(self.userDefaultsManager.csrfToken.isEmpty ? "❌ Missing" : "✅ Found (\(self.userDefaultsManager.csrfToken.prefix(20))...)")\n"
                     self.isLoading = false
                 }
             } catch {
