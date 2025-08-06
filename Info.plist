@@ -46,8 +46,6 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
-	<key>NSCameraUsageDescription</key>
-	<string>このアプリはQRコードをスキャンするためにカメラを使用します。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>QRコードの画像を保存または読み込むために写真ライブラリへのアクセスが必要です。</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
@@ -78,6 +76,8 @@
 			</array>
 		</dict>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>for scan qr codes</string>
 	<key>UIStatusBarStyle</key>
 	<string>UIStatusBarStyleDefault</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>

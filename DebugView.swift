@@ -215,7 +215,7 @@ struct DebugView: View {
     private func testQRUpdate() {
         isLoading = true
         testResults += "\n=== Testing QR Update API ===\n"
-        testResults += "URL: \(userDefaultsManager.baseURL)/update-status\n"
+        testResults += "URL: \(userDefaultsManager.baseURL)/api/update-status\n"
         
         Task {
             do {

@@ -522,7 +522,7 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
     }
     
     func updateStatus(qrCode: String, process: ProcessType, company: Int?, group: Int?, location: Int?, userName: String, note: String) async throws -> ScanResult {
-        let endpoint = "/update-status"
+        let endpoint = "/api/update-status"
         let fullURL = "\(baseURL)\(endpoint)"
         
         print("🔍 Attempting API call:")
@@ -623,7 +623,7 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
     }
     
     func updateStatusWithDiagnostics(qrCode: String, process: ProcessType, company: Int?, group: Int?, location: Int?, userName: String, note: String) async throws -> ScanResult {
-        let endpoint = "/update-status"
+        let endpoint = "/api/update-status"
         let fullURL = "\(baseURL)\(endpoint)"
         
         print("🔍 Attempting API call:")
