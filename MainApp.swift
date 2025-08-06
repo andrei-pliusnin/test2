@@ -91,6 +91,7 @@ enum APIError: LocalizedError {
     case serverError(Int)
     case unauthorized
     case csrfTokenMissing
+    case csrfTokenExpired
     
     var errorDescription: String? {
         switch self {
@@ -111,7 +112,7 @@ enum APIError: LocalizedError {
             case 404:
                 return "リソースが見つかりません"
             case 419:
-                return "CSRFトークンエラー: ページを再読み込みしてください"
+                return "セッションが期限切れです。再認証中..."
             case 422:
                 return "入力データエラー: 入力内容を確認してください"
             case 500:
@@ -123,6 +124,8 @@ enum APIError: LocalizedError {
             return "認証が必要です。再度ログインしてください。"
         case .csrfTokenMissing:
             return "CSRFトークンが見つかりません。ページを再読み込みしてください。"
+        case .csrfTokenExpired:
+            return "CSRFトークンが期限切れです。更新中..."
         }
     }
 }
@@ -160,6 +163,8 @@ class UserDefaultsManager: ObservableObject {
         }
     }
     
+    @Published var shouldShowLogin: Bool = false
+    
     init() {
         self.isLoggedIn = userDefaults.bool(forKey: "isLoggedIn")
         self.userName = userDefaults.string(forKey: "userName") ?? ""
@@ -174,11 +179,18 @@ class UserDefaultsManager: ObservableObject {
         authToken = ""
         csrfToken = ""
     }
+    
+    func clearCSRFToken() {
+        csrfToken = ""
+    }
 }
 
 class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
     @Published var isLoading = false
     let userDefaultsManager: UserDefaultsManager
+    private var csrfRetryCount = 0
+    private let maxCSRFRetries = 3
+    
     private lazy var session: URLSession = {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 30
@@ -197,7 +209,11 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
     }
     
     func urlSession(_ session: URLSession, didReceive challenge: URLAuthenticationChallenge, completionHandler: @escaping (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
-        completionHandler(.useCredential, URLCredential(trust: challenge.protectionSpace.serverTrust!))
+        guard let serverTrust = challenge.protectionSpace.serverTrust else {
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
+        completionHandler(.useCredential, URLCredential(trust: serverTrust))
     }
     
     private var baseURL: String {
@@ -230,6 +246,32 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
         }
         
         return request
+    }
+    
+    func refreshCSRFToken() async throws {
+        guard let url = URL(string: "\(baseURL)/login") else {
+            throw APIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        
+        let (data, response) = try await session.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? 0)
+        }
+        
+        if let htmlString = String(data: data, encoding: .utf8),
+           let csrfToken = extractCSRFToken(from: htmlString) {
+            DispatchQueue.main.async {
+                self.userDefaultsManager.csrfToken = csrfToken
+                print("✅ CSRF Token refreshed successfully")
+            }
+        } else {
+            throw APIError.csrfTokenMissing
+        }
     }
     
     func fetchUsers() async throws -> [User] {
@@ -273,23 +315,28 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
         var users: [User] = []
         
         let pattern = #"<option value="([^"]+)">([^<]+)</option>"#
-        let regex = try! NSRegularExpression(pattern: pattern)
-        let range = NSRange(location: 0, length: html.utf16.count)
         
-        regex.enumerateMatches(in: html, range: range) { match, _, _ in
-            if let match = match,
-               let valueRange = Range(match.range(at: 1), in: html),
-               let nameRange = Range(match.range(at: 2), in: html) {
-                let value = String(html[valueRange])
-                let name = String(html[nameRange])
-                
-                if !value.isEmpty && value != "" && value != "disabled" && value != "selected" {
-                    let user = User(id: users.count, name: name, email: nil)
-                    if !users.contains(where: { $0.name == name }) {
-                        users.append(user)
+        do {
+            let regex = try NSRegularExpression(pattern: pattern)
+            let range = NSRange(location: 0, length: html.utf16.count)
+            
+            regex.enumerateMatches(in: html, range: range) { match, _, _ in
+                if let match = match,
+                   let valueRange = Range(match.range(at: 1), in: html),
+                   let nameRange = Range(match.range(at: 2), in: html) {
+                    let value = String(html[valueRange])
+                    let name = String(html[nameRange])
+                    
+                    if !value.isEmpty && value != "" && value != "disabled" && value != "selected" {
+                        let user = User(id: users.count, name: name, email: nil)
+                        if !users.contains(where: { $0.name == name }) {
+                            users.append(user)
+                        }
                     }
                 }
             }
+        } catch {
+            print("❌ Regex error: \(error)")
         }
         
         return users
@@ -325,6 +372,11 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
     }
     
     func login(username: String) async throws -> Bool {
+        // Refresh CSRF token if needed
+        if userDefaultsManager.csrfToken.isEmpty {
+            try await refreshCSRFToken()
+        }
+        
         guard let url = URL(string: "\(baseURL)/login") else {
             throw APIError.invalidURL
         }
@@ -380,7 +432,13 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
             }
             return true
         } else if httpResponse.statusCode == 419 {
-            throw APIError.serverError(419)
+            // CSRF token expired, refresh and retry
+            if csrfRetryCount < maxCSRFRetries {
+                csrfRetryCount += 1
+                try await refreshCSRFToken()
+                return try await login(username: username)
+            }
+            throw APIError.csrfTokenExpired
         } else if httpResponse.statusCode == 422 {
             throw APIError.networkError("Validation failed - check username")
         }
@@ -422,6 +480,14 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
                 self.userDefaultsManager.logout()
             }
             throw APIError.serverError(401)
+        } else if httpResponse.statusCode == 419 {
+            // CSRF token expired, refresh and retry
+            if csrfRetryCount < maxCSRFRetries {
+                csrfRetryCount += 1
+                try await refreshCSRFToken()
+                return try await fetchCompanies()
+            }
+            throw APIError.csrfTokenExpired
         } else if httpResponse.statusCode == 200 {
             do {
                 return try JSONDecoder().decode([Company].self, from: data)
@@ -466,6 +532,13 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
                 self.userDefaultsManager.logout()
             }
             throw APIError.unauthorized
+        } else if httpResponse.statusCode == 419 {
+            if csrfRetryCount < maxCSRFRetries {
+                csrfRetryCount += 1
+                try await refreshCSRFToken()
+                return try await fetchGroups(for: companyId)
+            }
+            throw APIError.csrfTokenExpired
         } else if httpResponse.statusCode == 200 {
             do {
                 return try JSONDecoder().decode([Group].self, from: data)
@@ -509,6 +582,13 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
                 self.userDefaultsManager.logout()
             }
             throw APIError.unauthorized
+        } else if httpResponse.statusCode == 419 {
+            if csrfRetryCount < maxCSRFRetries {
+                csrfRetryCount += 1
+                try await refreshCSRFToken()
+                return try await fetchLocations(for: groupId)
+            }
+            throw APIError.csrfTokenExpired
         } else if httpResponse.statusCode == 200 {
             do {
                 return try JSONDecoder().decode([Location].self, from: data)
@@ -599,107 +679,15 @@ class EnhancedAPIService: NSObject, ObservableObject, URLSessionDelegate {
                 self.userDefaultsManager.logout()
             }
             throw APIError.serverError(401)
-        case 404:
-            print("🔍 404 Error - Endpoint not found")
-            print("📋 Possible issues:")
-            print("  1. Server URL incorrect: \(baseURL)")
-            print("  2. Endpoint path wrong: \(endpoint)")
-            print("  3. Server not running")
-            print("  4. Route not configured")
-            throw APIError.serverError(404)
-        case 422:
-            print("📝 Validation error - check request data")
-            if let responseString = String(data: data, encoding: .utf8) {
-                print("📄 Error details: \(responseString)")
+        case 419:
+            // CSRF token expired, refresh and retry
+            if csrfRetryCount < maxCSRFRetries {
+                csrfRetryCount += 1
+                print("🔄 CSRF token expired, refreshing... (attempt \(csrfRetryCount)/\(maxCSRFRetries))")
+                try await refreshCSRFToken()
+                return try await updateStatus(qrCode: qrCode, process: process, company: company, group: group, location: location, userName: userName, note: note)
             }
-            throw APIError.serverError(422)
-        default:
-            print("❌ Server error: \(httpResponse.statusCode)")
-            if let responseString = String(data: data, encoding: .utf8) {
-                print("📄 Error response: \(responseString)")
-            }
-            throw APIError.serverError(httpResponse.statusCode)
-        }
-    }
-    
-    func updateStatusWithDiagnostics(qrCode: String, process: ProcessType, company: Int?, group: Int?, location: Int?, userName: String, note: String) async throws -> ScanResult {
-        let endpoint = "/api/update-status"
-        let fullURL = "\(baseURL)\(endpoint)"
-        
-        print("🔍 Attempting API call:")
-        print("📍 Full URL: \(fullURL)")
-        print("📦 QR Code: \(qrCode)")
-        print("⚙️ Process: \(process.rawValue)")
-        print("🏢 Company: \(company?.description ?? "nil")")
-        print("👤 User: \(userName)")
-        
-        guard let url = URL(string: fullURL) else {
-            print("❌ Invalid URL: \(fullURL)")
-            throw APIError.invalidURL
-        }
-        
-        let body = [
-            "qr_code": qrCode,
-            "process": process.rawValue,
-            "company": company?.description ?? "",
-            "group": group?.description ?? "",
-            "location": location?.description ?? "",
-            "userName": userName,
-            "note": note
-        ]
-        
-        print("📤 Request body: \(body)")
-        
-        let bodyData = try JSONSerialization.data(withJSONObject: body)
-        let request = createRequest(url: url, method: "POST", body: bodyData)
-        
-        print("🔐 Request headers:")
-        for (key, value) in request.allHTTPHeaderFields ?? [:] {
-            print("  \(key): \(value)")
-        }
-        
-        DispatchQueue.main.async {
-            self.isLoading = true
-        }
-        defer {
-            DispatchQueue.main.async {
-                self.isLoading = false
-            }
-        }
-        
-        let (data, response) = try await session.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse else {
-            print("❌ Invalid response type")
-            throw APIError.networkError("Invalid response")
-        }
-        
-        print("📥 Response status: \(httpResponse.statusCode)")
-        print("📥 Response headers: \(httpResponse.allHeaderFields)")
-        
-        if let responseData = String(data: data, encoding: .utf8) {
-            print("📥 Response body: \(responseData)")
-        }
-        
-        switch httpResponse.statusCode {
-        case 200:
-            do {
-                let result = try JSONDecoder().decode(ScanResult.self, from: data)
-                print("✅ Decoded successfully: \(result)")
-                return result
-            } catch {
-                print("❌ Decoding error: \(error)")
-                if let responseString = String(data: data, encoding: .utf8) {
-                    print("📄 Raw response: \(responseString)")
-                }
-                throw APIError.decodingError
-            }
-        case 401:
-            print("🔐 Unauthorized - logging out user")
-            DispatchQueue.main.async {
-                self.userDefaultsManager.logout()
-            }
-            throw APIError.serverError(401)
+            throw APIError.csrfTokenExpired
         case 404:
             print("🔍 404 Error - Endpoint not found")
             print("📋 Possible issues:")
