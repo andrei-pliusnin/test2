@@ -1,6 +1,38 @@
 import SwiftUI
 import AVFoundation
 
+// Animation overlay for scan feedback
+struct ScanAnimationView: View {
+    @Binding var showAnimation: Bool
+    @Binding var isSuccess: Bool
+    
+    var body: some View {
+        ZStack {
+            if showAnimation {
+                Circle()
+                    .stroke(isSuccess ? Color.green : Color.red, lineWidth: 5)
+                    .scaleEffect(showAnimation ? 1.5 : 0.5)
+                    .opacity(showAnimation ? 0 : 1)
+                    .animation(.easeOut(duration: 0.5), value: showAnimation)
+                
+                Image(systemName: isSuccess ? "checkmark.circle.fill" : "xmark.circle.fill")
+                    .font(.system(size: 80))
+                    .foregroundColor(isSuccess ? .green : .red)
+                    .scaleEffect(showAnimation ? 1.2 : 0.8)
+                    .opacity(showAnimation ? 1 : 0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: showAnimation)
+            }
+        }
+        .onChange(of: showAnimation) { newValue in
+            if newValue {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    showAnimation = false
+                }
+            }
+        }
+    }
+}
+
 protocol QRScannerDelegate: AnyObject {
     func didScanQRCode(_ code: String)
 }
@@ -13,6 +45,7 @@ class ImprovedQRScannerViewController: UIViewController {
     private var lastScanTime: Date = Date()
     private var isSetupComplete = false
     private var torchButton: UIButton?
+    private var scanAreaView: UIView?
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -48,6 +81,7 @@ class ImprovedQRScannerViewController: UIViewController {
         loadingLabel.textAlignment = .center
         loadingLabel.font = UIFont.systemFont(ofSize: 18, weight: .medium)
         loadingLabel.translatesAutoresizingMaskIntoConstraints = false
+        loadingLabel.tag = 999 // Tag for removal later
         
         view.addSubview(loadingLabel)
         NSLayoutConstraint.activate([
@@ -70,6 +104,9 @@ class ImprovedQRScannerViewController: UIViewController {
     
     private func setupImprovedCamera() {
         guard !isSetupComplete else { return }
+        
+        // Remove loading label
+        view.viewWithTag(999)?.removeFromSuperview()
         
         do {
             captureSession = AVCaptureSession()
@@ -119,7 +156,7 @@ class ImprovedQRScannerViewController: UIViewController {
             previewLayer?.videoGravity = .resizeAspectFill
             
             if let previewLayer = previewLayer {
-                view.layer.sublayers?.removeAll()
+                view.layer.sublayers?.removeAll { $0 is AVCaptureVideoPreviewLayer }
                 view.layer.addSublayer(previewLayer)
             }
             
@@ -138,6 +175,9 @@ class ImprovedQRScannerViewController: UIViewController {
     
     private func setupTorchButton() {
         guard let device = AVCaptureDevice.default(for: .video), device.hasTorch else { return }
+        
+        // Remove existing torch button if any
+        torchButton?.removeFromSuperview()
         
         torchButton = UIButton(type: .system)
         torchButton?.setImage(UIImage(systemName: "flashlight.off.fill"), for: .normal)
@@ -176,108 +216,143 @@ class ImprovedQRScannerViewController: UIViewController {
         }
     }
     
+    func animateScanSuccess() {
+        guard let scanAreaView = scanAreaView else { return }
+        
+        UIView.animate(withDuration: 0.15, animations: {
+            scanAreaView.layer.borderColor = UIColor.green.cgColor
+            scanAreaView.layer.borderWidth = 5
+            scanAreaView.transform = CGAffineTransform(scaleX: 1.05, y: 1.05)
+        }) { _ in
+            UIView.animate(withDuration: 0.15, delay: 0.3, animations: {
+                scanAreaView.layer.borderColor = UIColor.systemGreen.cgColor
+                scanAreaView.layer.borderWidth = 3
+                scanAreaView.transform = .identity
+            })
+        }
+    }
+    
+    func animateScanError() {
+        guard let scanAreaView = scanAreaView else { return }
+        
+        UIView.animate(withDuration: 0.15, animations: {
+            scanAreaView.layer.borderColor = UIColor.red.cgColor
+            scanAreaView.layer.borderWidth = 5
+            scanAreaView.transform = CGAffineTransform(scaleX: 0.95, y: 0.95)
+        }) { _ in
+            UIView.animate(withDuration: 0.15, delay: 0.3, animations: {
+                scanAreaView.layer.borderColor = UIColor.systemGreen.cgColor
+                scanAreaView.layer.borderWidth = 3
+                scanAreaView.transform = .identity
+            })
+        }
+    }
+    
     private func createImprovedScanningOverlay() -> UIView {
         let overlayView = UIView(frame: view.bounds)
         overlayView.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+        overlayView.tag = 1000 // Tag for overlay
         
         let scanAreaSize: CGFloat = min(view.bounds.width, view.bounds.height) * 0.7
-        let scanArea = UIView()
-        scanArea.layer.borderColor = UIColor.systemGreen.cgColor
-        scanArea.layer.borderWidth = 3
-        scanArea.layer.cornerRadius = 15
-        scanArea.backgroundColor = UIColor.clear
+        scanAreaView = UIView()
+        scanAreaView?.layer.borderColor = UIColor.systemGreen.cgColor
+        scanAreaView?.layer.borderWidth = 3
+        scanAreaView?.layer.cornerRadius = 15
+        scanAreaView?.backgroundColor = UIColor.clear
         
         let cornerLength: CGFloat = 30
         let cornerWidth: CGFloat = 4
         
-        for i in 0..<4 {
-            let corner = UIView()
-            corner.backgroundColor = UIColor.systemGreen
-            scanArea.addSubview(corner)
-            corner.translatesAutoresizingMaskIntoConstraints = false
-            
-            switch i {
-            case 0:
-                NSLayoutConstraint.activate([
-                    corner.topAnchor.constraint(equalTo: scanArea.topAnchor),
-                    corner.leadingAnchor.constraint(equalTo: scanArea.leadingAnchor),
-                    corner.widthAnchor.constraint(equalToConstant: cornerLength),
-                    corner.heightAnchor.constraint(equalToConstant: cornerWidth)
-                ])
-                let verticalCorner = UIView()
-                verticalCorner.backgroundColor = UIColor.systemGreen
-                scanArea.addSubview(verticalCorner)
-                verticalCorner.translatesAutoresizingMaskIntoConstraints = false
-                NSLayoutConstraint.activate([
-                    verticalCorner.topAnchor.constraint(equalTo: scanArea.topAnchor),
-                    verticalCorner.leadingAnchor.constraint(equalTo: scanArea.leadingAnchor),
-                    verticalCorner.widthAnchor.constraint(equalToConstant: cornerWidth),
-                    verticalCorner.heightAnchor.constraint(equalToConstant: cornerLength)
-                ])
-            case 1:
-                NSLayoutConstraint.activate([
-                    corner.topAnchor.constraint(equalTo: scanArea.topAnchor),
-                    corner.trailingAnchor.constraint(equalTo: scanArea.trailingAnchor),
-                    corner.widthAnchor.constraint(equalToConstant: cornerLength),
-                    corner.heightAnchor.constraint(equalToConstant: cornerWidth)
-                ])
-                let verticalCorner = UIView()
-                verticalCorner.backgroundColor = UIColor.systemGreen
-                scanArea.addSubview(verticalCorner)
-                verticalCorner.translatesAutoresizingMaskIntoConstraints = false
-                NSLayoutConstraint.activate([
-                    verticalCorner.topAnchor.constraint(equalTo: scanArea.topAnchor),
-                    verticalCorner.trailingAnchor.constraint(equalTo: scanArea.trailingAnchor),
-                    verticalCorner.widthAnchor.constraint(equalToConstant: cornerWidth),
-                    verticalCorner.heightAnchor.constraint(equalToConstant: cornerLength)
-                ])
-            case 2:
-                NSLayoutConstraint.activate([
-                    corner.bottomAnchor.constraint(equalTo: scanArea.bottomAnchor),
-                    corner.leadingAnchor.constraint(equalTo: scanArea.leadingAnchor),
-                    corner.widthAnchor.constraint(equalToConstant: cornerLength),
-                    corner.heightAnchor.constraint(equalToConstant: cornerWidth)
-                ])
-                let verticalCorner = UIView()
-                verticalCorner.backgroundColor = UIColor.systemGreen
-                scanArea.addSubview(verticalCorner)
-                verticalCorner.translatesAutoresizingMaskIntoConstraints = false
-                NSLayoutConstraint.activate([
-                    verticalCorner.bottomAnchor.constraint(equalTo: scanArea.bottomAnchor),
-                    verticalCorner.leadingAnchor.constraint(equalTo: scanArea.leadingAnchor),
-                    verticalCorner.widthAnchor.constraint(equalToConstant: cornerWidth),
-                    verticalCorner.heightAnchor.constraint(equalToConstant: cornerLength)
-                ])
-            case 3:
-                NSLayoutConstraint.activate([
-                    corner.bottomAnchor.constraint(equalTo: scanArea.bottomAnchor),
-                    corner.trailingAnchor.constraint(equalTo: scanArea.trailingAnchor),
-                    corner.widthAnchor.constraint(equalToConstant: cornerLength),
-                    corner.heightAnchor.constraint(equalToConstant: cornerWidth)
-                ])
-                let verticalCorner = UIView()
-                verticalCorner.backgroundColor = UIColor.systemGreen
-                scanArea.addSubview(verticalCorner)
-                verticalCorner.translatesAutoresizingMaskIntoConstraints = false
-                NSLayoutConstraint.activate([
-                    verticalCorner.bottomAnchor.constraint(equalTo: scanArea.bottomAnchor),
-                    verticalCorner.trailingAnchor.constraint(equalTo: scanArea.trailingAnchor),
-                    verticalCorner.widthAnchor.constraint(equalToConstant: cornerWidth),
-                    verticalCorner.heightAnchor.constraint(equalToConstant: cornerLength)
-                ])
-            default:
-                break
+        if let scanArea = scanAreaView {
+            for i in 0..<4 {
+                let corner = UIView()
+                corner.backgroundColor = UIColor.systemGreen
+                scanArea.addSubview(corner)
+                corner.translatesAutoresizingMaskIntoConstraints = false
+                
+                switch i {
+                case 0: // Top-left
+                    NSLayoutConstraint.activate([
+                        corner.topAnchor.constraint(equalTo: scanArea.topAnchor),
+                        corner.leadingAnchor.constraint(equalTo: scanArea.leadingAnchor),
+                        corner.widthAnchor.constraint(equalToConstant: cornerLength),
+                        corner.heightAnchor.constraint(equalToConstant: cornerWidth)
+                    ])
+                    let verticalCorner = UIView()
+                    verticalCorner.backgroundColor = UIColor.systemGreen
+                    scanArea.addSubview(verticalCorner)
+                    verticalCorner.translatesAutoresizingMaskIntoConstraints = false
+                    NSLayoutConstraint.activate([
+                        verticalCorner.topAnchor.constraint(equalTo: scanArea.topAnchor),
+                        verticalCorner.leadingAnchor.constraint(equalTo: scanArea.leadingAnchor),
+                        verticalCorner.widthAnchor.constraint(equalToConstant: cornerWidth),
+                        verticalCorner.heightAnchor.constraint(equalToConstant: cornerLength)
+                    ])
+                case 1: // Top-right
+                    NSLayoutConstraint.activate([
+                        corner.topAnchor.constraint(equalTo: scanArea.topAnchor),
+                        corner.trailingAnchor.constraint(equalTo: scanArea.trailingAnchor),
+                        corner.widthAnchor.constraint(equalToConstant: cornerLength),
+                        corner.heightAnchor.constraint(equalToConstant: cornerWidth)
+                    ])
+                    let verticalCorner = UIView()
+                    verticalCorner.backgroundColor = UIColor.systemGreen
+                    scanArea.addSubview(verticalCorner)
+                    verticalCorner.translatesAutoresizingMaskIntoConstraints = false
+                    NSLayoutConstraint.activate([
+                        verticalCorner.topAnchor.constraint(equalTo: scanArea.topAnchor),
+                        verticalCorner.trailingAnchor.constraint(equalTo: scanArea.trailingAnchor),
+                        verticalCorner.widthAnchor.constraint(equalToConstant: cornerWidth),
+                        verticalCorner.heightAnchor.constraint(equalToConstant: cornerLength)
+                    ])
+                case 2: // Bottom-left
+                    NSLayoutConstraint.activate([
+                        corner.bottomAnchor.constraint(equalTo: scanArea.bottomAnchor),
+                        corner.leadingAnchor.constraint(equalTo: scanArea.leadingAnchor),
+                        corner.widthAnchor.constraint(equalToConstant: cornerLength),
+                        corner.heightAnchor.constraint(equalToConstant: cornerWidth)
+                    ])
+                    let verticalCorner = UIView()
+                    verticalCorner.backgroundColor = UIColor.systemGreen
+                    scanArea.addSubview(verticalCorner)
+                    verticalCorner.translatesAutoresizingMaskIntoConstraints = false
+                    NSLayoutConstraint.activate([
+                        verticalCorner.bottomAnchor.constraint(equalTo: scanArea.bottomAnchor),
+                        verticalCorner.leadingAnchor.constraint(equalTo: scanArea.leadingAnchor),
+                        verticalCorner.widthAnchor.constraint(equalToConstant: cornerWidth),
+                        verticalCorner.heightAnchor.constraint(equalToConstant: cornerLength)
+                    ])
+                case 3: // Bottom-right
+                    NSLayoutConstraint.activate([
+                        corner.bottomAnchor.constraint(equalTo: scanArea.bottomAnchor),
+                        corner.trailingAnchor.constraint(equalTo: scanArea.trailingAnchor),
+                        corner.widthAnchor.constraint(equalToConstant: cornerLength),
+                        corner.heightAnchor.constraint(equalToConstant: cornerWidth)
+                    ])
+                    let verticalCorner = UIView()
+                    verticalCorner.backgroundColor = UIColor.systemGreen
+                    scanArea.addSubview(verticalCorner)
+                    verticalCorner.translatesAutoresizingMaskIntoConstraints = false
+                    NSLayoutConstraint.activate([
+                        verticalCorner.bottomAnchor.constraint(equalTo: scanArea.bottomAnchor),
+                        verticalCorner.trailingAnchor.constraint(equalTo: scanArea.trailingAnchor),
+                        verticalCorner.widthAnchor.constraint(equalToConstant: cornerWidth),
+                        verticalCorner.heightAnchor.constraint(equalToConstant: cornerLength)
+                    ])
+                default:
+                    break
+                }
             }
+            
+            overlayView.addSubview(scanArea)
+            scanArea.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                scanArea.centerXAnchor.constraint(equalTo: overlayView.centerXAnchor),
+                scanArea.centerYAnchor.constraint(equalTo: overlayView.centerYAnchor),
+                scanArea.widthAnchor.constraint(equalToConstant: scanAreaSize),
+                scanArea.heightAnchor.constraint(equalToConstant: scanAreaSize)
+            ])
         }
-        
-        overlayView.addSubview(scanArea)
-        scanArea.translatesAutoresizingMaskIntoConstraints = false
-        NSLayoutConstraint.activate([
-            scanArea.centerXAnchor.constraint(equalTo: overlayView.centerXAnchor),
-            scanArea.centerYAnchor.constraint(equalTo: overlayView.centerYAnchor),
-            scanArea.widthAnchor.constraint(equalToConstant: scanAreaSize),
-            scanArea.heightAnchor.constraint(equalToConstant: scanAreaSize)
-        ])
         
         let instructionLabel = UILabel()
         instructionLabel.text = "QRコードを枠内に合わせてください"
@@ -290,7 +365,7 @@ class ImprovedQRScannerViewController: UIViewController {
         overlayView.addSubview(instructionLabel)
         NSLayoutConstraint.activate([
             instructionLabel.centerXAnchor.constraint(equalTo: overlayView.centerXAnchor),
-            instructionLabel.topAnchor.constraint(equalTo: scanArea.bottomAnchor, constant: 30),
+            instructionLabel.topAnchor.constraint(equalTo: scanAreaView?.bottomAnchor ?? overlayView.centerYAnchor, constant: 30),
             instructionLabel.leadingAnchor.constraint(greaterThanOrEqualTo: overlayView.leadingAnchor, constant: 20),
             instructionLabel.trailingAnchor.constraint(lessThanOrEqualTo: overlayView.trailingAnchor, constant: -20)
         ])
@@ -347,8 +422,8 @@ class ImprovedQRScannerViewController: UIViewController {
         }
         
         if !captureSession.isRunning {
-            DispatchQueue.global(qos: .userInitiated).async {
-                captureSession.startRunning()
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.captureSession?.startRunning()
             }
         }
     }
@@ -357,20 +432,29 @@ class ImprovedQRScannerViewController: UIViewController {
         guard let captureSession = captureSession else { return }
         
         if captureSession.isRunning {
-            DispatchQueue.global(qos: .userInitiated).async {
-                captureSession.stopRunning()
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                self?.captureSession?.stopRunning()
             }
         }
         
-        if let device = AVCaptureDevice.default(for: .video), device.hasTorch && device.torchMode == .on {
-            try? device.lockForConfiguration()
-            device.torchMode = .off
-            device.unlockForConfiguration()
+        // Safely turn off torch
+        if let device = AVCaptureDevice.default(for: .video), device.hasTorch {
+            do {
+                try device.lockForConfiguration()
+                if device.torchMode == .on {
+                    device.torchMode = .off
+                }
+                device.unlockForConfiguration()
+            } catch {
+                print("Failed to turn off torch: \(error)")
+            }
         }
     }
     
     deinit {
         stopScanning()
+        captureSession = nil
+        previewLayer = nil
     }
 }
 
@@ -387,7 +471,10 @@ extension ImprovedQRScannerViewController: AVCaptureMetadataOutputObjectsDelegat
         
         lastScannedCode = stringValue
         lastScanTime = currentTime
-                
+        
+        // Visual feedback
+        animateScanSuccess()
+        
         let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
         impactFeedback.impactOccurred()
         
@@ -397,15 +484,24 @@ extension ImprovedQRScannerViewController: AVCaptureMetadataOutputObjectsDelegat
 
 struct ImprovedQRScannerView: UIViewControllerRepresentable {
     @Binding var scannedCode: String?
+    @Binding var showSuccessAnimation: Bool
+    @Binding var showErrorAnimation: Bool
     @Environment(\.presentationMode) var presentationMode
     
     func makeUIViewController(context: Context) -> ImprovedQRScannerViewController {
         let controller = ImprovedQRScannerViewController()
         controller.delegate = context.coordinator
+        context.coordinator.viewController = controller
         return controller
     }
     
-    func updateUIViewController(_ uiViewController: ImprovedQRScannerViewController, context: Context) {}
+    func updateUIViewController(_ uiViewController: ImprovedQRScannerViewController, context: Context) {
+        if showSuccessAnimation {
+            uiViewController.animateScanSuccess()
+        } else if showErrorAnimation {
+            uiViewController.animateScanError()
+        }
+    }
     
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -413,6 +509,7 @@ struct ImprovedQRScannerView: UIViewControllerRepresentable {
     
     class Coordinator: NSObject, QRScannerDelegate {
         let parent: ImprovedQRScannerView
+        weak var viewController: ImprovedQRScannerViewController?
         
         init(_ parent: ImprovedQRScannerView) {
             self.parent = parent
@@ -498,6 +595,8 @@ struct SettingsView: View {
             }
             .alert("設定", isPresented: $showingAlert) {
                 Button("OK") {
+                    // Trigger login view after settings saved
+                    userDefaultsManager.shouldShowLogin = true
                     presentationMode.wrappedValue.dismiss()
                 }
             } message: {
@@ -514,6 +613,7 @@ struct SettingsView: View {
         }
         
         userDefaultsManager.baseURL = cleanIP
+        userDefaultsManager.clearCSRFToken() // Clear old CSRF token
         alertMessage = "設定が保存されました"
         showingAlert = true
     }
@@ -642,10 +742,20 @@ struct EnhancedLoginView: View {
                     .environmentObject(userDefaultsManager)
             }
             .onAppear {
+                // Auto-load users if URL is set
                 if !userDefaultsManager.baseURL.isEmpty && users.isEmpty {
                     Task {
                         await loadUsers()
                     }
+                }
+            }
+            .onChange(of: userDefaultsManager.shouldShowLogin) { shouldShow in
+                // Trigger user loading after settings saved
+                if shouldShow && !userDefaultsManager.baseURL.isEmpty {
+                    Task {
+                        await loadUsers()
+                    }
+                    userDefaultsManager.shouldShowLogin = false
                 }
             }
         }
@@ -656,7 +766,16 @@ struct EnhancedLoginView: View {
             users = try await apiService.fetchUsers()
         } catch {
             DispatchQueue.main.async {
-                self.alertMessage = "ユーザーの読み込みに失敗しました: \(error.localizedDescription)"
+                if let apiError = error as? APIError {
+                    switch apiError {
+                    case .csrfTokenExpired:
+                        self.alertMessage = "セッションが期限切れです。再試行してください。"
+                    default:
+                        self.alertMessage = "ユーザーの読み込みに失敗しました: \(error.localizedDescription)"
+                    }
+                } else {
+                    self.alertMessage = "ユーザーの読み込みに失敗しました: \(error.localizedDescription)"
+                }
                 self.showingAlert = true
             }
         }
@@ -675,7 +794,17 @@ struct EnhancedLoginView: View {
             }
         } catch {
             DispatchQueue.main.async {
-                self.alertMessage = error.localizedDescription
+                if let apiError = error as? APIError {
+                    switch apiError {
+                    case .csrfTokenExpired:
+                        // Auto-retry handled in API service
+                        self.alertMessage = "セッションを更新しました。もう一度お試しください。"
+                    default:
+                        self.alertMessage = error.localizedDescription
+                    }
+                } else {
+                    self.alertMessage = error.localizedDescription
+                }
                 self.showingAlert = true
             }
         }
@@ -827,14 +956,7 @@ struct ProcessSelectionView: View {
             companies = try await apiService.fetchCompanies()
         } catch {
             DispatchQueue.main.async {
-                if let apiError = error as? APIError,
-                   case .serverError(let code) = apiError,
-                   code == 401 {
-                    self.alertMessage = "セッションが期限切れです。再度ログインしてください。"
-                } else {
-                    self.alertMessage = "会社リストの読み込みエラー: \(error.localizedDescription)"
-                }
-                self.showingAlert = true
+                self.handleAPIError(error, context: "会社リストの読み込み")
             }
         }
     }
@@ -848,14 +970,7 @@ struct ProcessSelectionView: View {
                 groups = try await apiService.fetchGroups(for: companyId)
             } catch {
                 DispatchQueue.main.async {
-                    if let apiError = error as? APIError,
-                       case .serverError(let code) = apiError,
-                       code == 401 {
-                        self.alertMessage = "セッションが期限切れです。再度ログインしてください。"
-                    } else {
-                        self.alertMessage = "グループリストの読み込みエラー: \(error.localizedDescription)"
-                    }
-                    self.showingAlert = true
+                    self.handleAPIError(error, context: "グループリストの読み込み")
                 }
             }
         }
@@ -870,17 +985,26 @@ struct ProcessSelectionView: View {
                 locations = try await apiService.fetchLocations(for: groupId)
             } catch {
                 DispatchQueue.main.async {
-                    if let apiError = error as? APIError,
-                       case .serverError(let code) = apiError,
-                       code == 401 {
-                        self.alertMessage = "セッションが期限切れです。再度ログインしてください。"
-                    } else {
-                        self.alertMessage = "ロケーションリストの読み込みエラー: \(error.localizedDescription)"
-                    }
-                    self.showingAlert = true
+                    self.handleAPIError(error, context: "ロケーションリストの読み込み")
                 }
             }
         }
+    }
+    
+    private func handleAPIError(_ error: Error, context: String) {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .serverError(401):
+                self.alertMessage = "セッションが期限切れです。再度ログインしてください。"
+            case .csrfTokenExpired:
+                self.alertMessage = "セッションを更新しました。もう一度お試しください。"
+            default:
+                self.alertMessage = "\(context)エラー: \(error.localizedDescription)"
+            }
+        } else {
+            self.alertMessage = "\(context)エラー: \(error.localizedDescription)"
+        }
+        self.showingAlert = true
     }
 }
 
@@ -904,86 +1028,106 @@ struct ImprovedQRScannerContainerView: View {
     @State private var showingDiagnostics = false
     @State private var diagnosticsInfo = ""
     
+    @State private var showSuccessAnimation = false
+    @State private var showErrorAnimation = false
+    @State private var animationSuccess = true
+    
     @Environment(\.presentationMode) var presentationMode
     
     var body: some View {
         NavigationView {
-            VStack {
-                HStack {
-                    Text(userName)
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                    Spacer()
-                    
-                    Button("診断") {
-                        showDiagnostics()
+            ZStack {
+                VStack {
+                    HStack {
+                        Text(userName)
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                        Spacer()
+                        
+                        Button("診断") {
+                            showDiagnostics()
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        
+                        Button("戻る") {
+                            presentationMode.wrappedValue.dismiss()
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    
-                    Button("戻る") {
-                        presentationMode.wrappedValue.dismiss()
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .padding(.horizontal)
-                
-                if apiService.isLoading {
-                    ProgressView("処理中...")
-                        .scaleEffect(1.2)
-                        .padding()
-                }
-                
-                ImprovedQRScannerView(scannedCode: $scannedCode)
-                    .frame(height: 350)
-                    .cornerRadius(10)
                     .padding(.horizontal)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("処理: \(selectedProcess.displayName)")
-                        .font(.headline)
                     
-                    if selectedProcess == .shipping {
-                        if let company = selectedCompany {
-                            Text("得意先: \(company.name)")
-                        }
-                        if let group = selectedGroup {
-                            Text("JV名: \(group.name)")
-                        }
-                        if let location = selectedLocation {
-                            Text("現場名: \(location.name)")
-                        }
+                    if apiService.isLoading {
+                        ProgressView("処理中...")
+                            .scaleEffect(1.2)
+                            .padding()
                     }
                     
-                    if !note.isEmpty {
-                        Text("備考: \(note)")
+                    ZStack {
+                        ImprovedQRScannerView(
+                            scannedCode: $scannedCode,
+                            showSuccessAnimation: $showSuccessAnimation,
+                            showErrorAnimation: $showErrorAnimation
+                        )
+                        .frame(height: 350)
+                        .cornerRadius(10)
+                        .padding(.horizontal)
+                        
+                        ScanAnimationView(
+                            showAnimation: .init(
+                                get: { showSuccessAnimation || showErrorAnimation },
+                                set: { _ in }
+                            ),
+                            isSuccess: $animationSuccess
+                        )
                     }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal)
-                
-                if !scannedItems.isEmpty {
-                    List(scannedItems.indices, id: \.self) { index in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("\(index + 1). 管理番号: \(scannedItems[index].managementNumber)")
-                                .fontWeight(.semibold)
-                            
-                            if let company = scannedItems[index].company,
-                               let group = scannedItems[index].group,
-                               let location = scannedItems[index].location {
-                                Text("現場: \(company) \(group) \(location)")
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("処理: \(selectedProcess.displayName)")
+                            .font(.headline)
+                        
+                        if selectedProcess == .shipping {
+                            if let company = selectedCompany {
+                                Text("得意先: \(company.name)")
+                            }
+                            if let group = selectedGroup {
+                                Text("JV名: \(group.name)")
+                            }
+                            if let location = selectedLocation {
+                                Text("現場名: \(location.name)")
+                            }
+                        }
+                        
+                        if !note.isEmpty {
+                            Text("備考: \(note)")
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal)
+                    
+                    if !scannedItems.isEmpty {
+                        List(scannedItems.indices, id: \.self) { index in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("\(index + 1). 管理番号: \(scannedItems[index].managementNumber)")
+                                    .fontWeight(.semibold)
+                                
+                                if let company = scannedItems[index].company,
+                                   let group = scannedItems[index].group,
+                                   let location = scannedItems[index].location {
+                                    Text("現場: \(company) \(group) \(location)")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                Text("状態: \(scannedItems[index].status)")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
-                            
-                            Text("状態: \(scannedItems[index].status)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+                            .padding(.vertical, 2)
                         }
-                        .padding(.vertical, 2)
+                    } else {
+                        Spacer()
                     }
-                } else {
-                    Spacer()
                 }
             }
             .navigationBarHidden(true)
@@ -1047,7 +1191,7 @@ struct ImprovedQRScannerContainerView: View {
     private func processScannedCode(_ code: String) {
         Task {
             do {
-                let result = try await apiService.updateStatusWithDiagnostics(
+                let result = try await apiService.updateStatus(
                     qrCode: code,
                     process: selectedProcess,
                     company: selectedCompany?.id,
@@ -1064,15 +1208,21 @@ struct ImprovedQRScannerContainerView: View {
                             self.scanCount += 1
                         }
                         VibrationHelper.success()
+                        self.animationSuccess = true
+                        self.showSuccessAnimation = true
                         self.showAlert(title: "成功", message: "QRコードの読み取りに成功しました")
                     } else {
                         VibrationHelper.error()
+                        self.animationSuccess = false
+                        self.showErrorAnimation = true
                         self.showAlert(title: "失敗", message: result.message ?? "不明なエラー")
                     }
                 }
             } catch {
                 DispatchQueue.main.async {
                     VibrationHelper.error()
+                    self.animationSuccess = false
+                    self.showErrorAnimation = true
                     
                     var errorMessage = ""
                     var errorTitle = "エラー"
@@ -1081,25 +1231,16 @@ struct ImprovedQRScannerContainerView: View {
                         switch apiError {
                         case .serverError(404):
                             errorTitle = "サーバーエラー (404)"
-                            errorMessage = """
-                            リソースが見つかりません。
-                            
-                            考えられる原因:
-                            • サーバーURLが間違っている
-                            • /api/update-status エンドポイントが存在しない
-                            • サーバーが起動していない
-                            • ルーティング設定に問題がある
-                            
-                            現在のURL: \(self.apiService.userDefaultsManager.baseURL)/api/update-status
-                            
-                            診断ボタンで詳細確認してください。
-                            """
+                            errorMessage = "エンドポイントが見つかりません。サーバー設定を確認してください。"
                         case .serverError(401):
                             errorTitle = "認証エラー"
                             errorMessage = "セッションが期限切れです。アプリを再起動してログインし直してください。"
                         case .serverError(422):
                             errorTitle = "データエラー"
                             errorMessage = "送信データに問題があります。設定を確認してください。"
+                        case .csrfTokenExpired:
+                            errorTitle = "セッションエラー"
+                            errorMessage = "セッションが更新されました。もう一度お試しください。"
                         case .networkError(let msg):
                             errorTitle = "ネットワークエラー"
                             errorMessage = msg
@@ -1120,6 +1261,12 @@ struct ImprovedQRScannerContainerView: View {
         alertTitle = title
         alertMessage = message
         showingAlert = true
+        
+        // Reset animations after a delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+            showSuccessAnimation = false
+            showErrorAnimation = false
+        }
     }
 }
 
